@@ -8,3 +8,21 @@
 [2025-03-23 09:44:38] [trading] [INFO] -   Timeframes: ['1h']
 [2025-03-23 09:44:38] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
 [2025-03-23 09:44:38] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-23 10:29:58] [trading] [INFO] - Running validation backtest
+[2025-03-23 11:07:24] [trading] [ERROR] - Error training model for BTCUSDT 1h: 'PerformanceCalculator' object has no attribute 'logger'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 385, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 245, in run_backtest
+    performance = self.performance_calculator.calculate_metrics(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/performance_metrics.py", line 80, in calculate_metrics
+    self.logger.warning("No trades provided for metrics calculation")
+AttributeError: 'PerformanceCalculator' object has no attribute 'logger'
+[2025-03-23 11:07:24] [trading] [INFO] - Total training time: 1:22:46
+[2025-03-23 11:07:24] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-23 11:07:24] [trading] [INFO] - Total execution time: 1:22:46
+[2025-03-23 11:07:24] [trading] [INFO] - ================================================================================
+[2025-03-23 11:07:24] [trading] [INFO] - Finished at: 2025-03-23 11:07:24
+[2025-03-23 11:07:24] [trading] [INFO] - ================================================================================
