@@ -1,0 +1,36 @@
+[2025-03-21 12:58:49] [trading] [INFO] - ================================================================================
+[2025-03-21 12:58:49] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-21 12:58:49] [trading] [INFO] - Started at: 2025-03-21 12:58:49
+[2025-03-21 12:58:49] [trading] [INFO] - ================================================================================
+[2025-03-21 12:58:49] [trading] [INFO] - Running model training
+[2025-03-21 12:58:49] [trading] [INFO] - Training Configuration:
+[2025-03-21 12:58:49] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 12:58:49] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 12:58:49] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 12:58:49] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-21 12:58:49] [trading] [ERROR] - Error training model for BTCUSDT 1h: non convertible value 2020-12-31 23:00:00 with the unit 'ms', at position 0
+Traceback (most recent call last):
+  File "tslib.pyx", line 316, in pandas._libs.tslib.array_with_unit_to_datetime
+ValueError: could not convert string to float: '2020-12-31 23:00:00'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 280, in run_training
+    df = prepare_data(config_manager, symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 76, in prepare_data
+    df = data_loader.load_data(symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/data/data_loader.py", line 61, in load_data
+    df['timestamp'] = pd.to_datetime(df['Open time'], unit='ms')
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/core/tools/datetimes.py", line 1067, in to_datetime
+    values = convert_listlike(arg._values, format)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/core/tools/datetimes.py", line 407, in _convert_listlike_datetimes
+    return _to_datetime_with_unit(arg, unit, name, utc, errors)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/core/tools/datetimes.py", line 526, in _to_datetime_with_unit
+    arr, tz_parsed = tslib.array_with_unit_to_datetime(arg, unit, errors=errors)
+  File "tslib.pyx", line 344, in pandas._libs.tslib.array_with_unit_to_datetime
+  File "tslib.pyx", line 318, in pandas._libs.tslib.array_with_unit_to_datetime
+ValueError: non convertible value 2020-12-31 23:00:00 with the unit 'ms', at position 0
+[2025-03-21 12:58:49] [trading] [INFO] - ================================================================================
+[2025-03-21 12:58:49] [trading] [INFO] - Finished at: 2025-03-21 12:58:49
+[2025-03-21 12:58:49] [trading] [INFO] - ================================================================================

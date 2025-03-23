@@ -1,0 +1,20 @@
+[2025-03-21 13:30:46] [trading] [INFO] - ================================================================================
+[2025-03-21 13:30:46] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-21 13:30:46] [trading] [INFO] - Started at: 2025-03-21 13:30:46
+[2025-03-21 13:30:46] [trading] [INFO] - ================================================================================
+[2025-03-21 13:30:46] [trading] [INFO] - Running model training
+[2025-03-21 13:30:46] [trading] [INFO] - Training Configuration:
+[2025-03-21 13:30:46] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 13:30:46] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 13:30:46] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 13:30:46] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-21 13:32:27] [trading] [ERROR] - Error training model for BTCUSDT 1h: 'Namespace' object has no attribute 'epochs'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 284, in run_training
+    model = train_model(config_manager, args, symbol, timeframe, df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 189, in train_model
+    epochs = args.epochs or config_manager.get('model.epochs', 100)
+AttributeError: 'Namespace' object has no attribute 'epochs'
+[2025-03-21 13:32:27] [trading] [INFO] - ================================================================================
+[2025-03-21 13:32:27] [trading] [INFO] - Finished at: 2025-03-21 13:32:27
+[2025-03-21 13:32:27] [trading] [INFO] - ================================================================================

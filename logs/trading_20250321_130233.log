@@ -1,0 +1,40 @@
+[2025-03-21 13:02:33] [trading] [INFO] - ================================================================================
+[2025-03-21 13:02:33] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-21 13:02:33] [trading] [INFO] - Started at: 2025-03-21 13:02:33
+[2025-03-21 13:02:33] [trading] [INFO] - ================================================================================
+[2025-03-21 13:02:33] [trading] [INFO] - Running model training
+[2025-03-21 13:02:33] [trading] [INFO] - Training Configuration:
+[2025-03-21 13:02:33] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 13:02:33] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 13:02:33] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 13:02:33] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-21 13:02:33] [trading] [ERROR] - Error training model for BTCUSDT 1h: could not convert string to float: '2021-01-09 07:00:00'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 280, in run_training
+    df = prepare_data(config_manager, symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 86, in prepare_data
+    df, selected_features = feature_selector.select_features(df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/data/feature_selection.py", line 57, in select_features
+    selected_features = self._rfe_selection(df_clean, feature_cols)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/data/feature_selection.py", line 146, in _rfe_selection
+    rfe.fit(X, y)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/base.py", line 1389, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/feature_selection/_rfe.py", line 276, in fit
+    return self._fit(X, y, **routed_params.estimator.fit)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/feature_selection/_rfe.py", line 283, in _fit
+    X, y = validate_data(
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/utils/validation.py", line 2961, in validate_data
+    X, y = check_X_y(X, y, **check_params)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/utils/validation.py", line 1370, in check_X_y
+    X = check_array(
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/utils/validation.py", line 1055, in check_array
+    array = _asarray_with_order(array, order=order, dtype=dtype, xp=xp)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/sklearn/utils/_array_api.py", line 839, in _asarray_with_order
+    array = numpy.asarray(array, order=order, dtype=dtype)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/core/generic.py", line 2153, in __array__
+    arr = np.asarray(values, dtype=dtype)
+ValueError: could not convert string to float: '2021-01-09 07:00:00'
+[2025-03-21 13:02:33] [trading] [INFO] - ================================================================================
+[2025-03-21 13:02:33] [trading] [INFO] - Finished at: 2025-03-21 13:02:33
+[2025-03-21 13:02:33] [trading] [INFO] - ================================================================================

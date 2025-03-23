@@ -1,0 +1,10 @@
+[2025-03-22 09:05:40] [trading] [INFO] - ================================================================================
+[2025-03-22 09:05:40] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-22 09:05:40] [trading] [INFO] - Started at: 2025-03-22 09:05:40
+[2025-03-22 09:05:40] [trading] [INFO] - ================================================================================
+[2025-03-22 09:05:40] [trading] [INFO] - Running model training
+[2025-03-22 09:05:40] [trading] [INFO] - Training Configuration:
+[2025-03-22 09:05:40] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-22 09:05:40] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-22 09:05:40] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-22 09:05:40] [trading] [INFO] - Training model for BTCUSDT 1h

@@ -1,0 +1,20 @@
+[2025-03-21 13:13:40] [trading] [INFO] - ================================================================================
+[2025-03-21 13:13:40] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-21 13:13:40] [trading] [INFO] - Started at: 2025-03-21 13:13:40
+[2025-03-21 13:13:40] [trading] [INFO] - ================================================================================
+[2025-03-21 13:13:40] [trading] [INFO] - Running model training
+[2025-03-21 13:13:40] [trading] [INFO] - Training Configuration:
+[2025-03-21 13:13:40] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 13:13:40] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 13:13:40] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 13:13:40] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-21 13:15:21] [trading] [ERROR] - Error training model for BTCUSDT 1h: 'Namespace' object has no attribute 'no_validation'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 283, in run_training
+    model = train_model(config_manager, args, symbol, timeframe, df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 141, in train_model
+    if args.no_validation:
+AttributeError: 'Namespace' object has no attribute 'no_validation'
+[2025-03-21 13:15:21] [trading] [INFO] - ================================================================================
+[2025-03-21 13:15:21] [trading] [INFO] - Finished at: 2025-03-21 13:15:21
+[2025-03-21 13:15:21] [trading] [INFO] - ================================================================================

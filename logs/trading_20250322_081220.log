@@ -1,0 +1,22 @@
+[2025-03-22 08:12:20] [trading] [INFO] - ================================================================================
+[2025-03-22 08:12:20] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-22 08:12:20] [trading] [INFO] - Started at: 2025-03-22 08:12:20
+[2025-03-22 08:12:20] [trading] [INFO] - ================================================================================
+[2025-03-22 08:12:20] [trading] [INFO] - Running model training
+[2025-03-22 08:12:20] [trading] [INFO] - Training Configuration:
+[2025-03-22 08:12:20] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-22 08:12:20] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-22 08:12:20] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-22 08:12:20] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-22 08:14:34] [trading] [INFO] - Running validation backtest
+[2025-03-22 08:26:34] [trading] [INFO] - Generating performance report
+[2025-03-22 08:26:34] [trading] [INFO] - Validation report generated: reports/BTCUSDT_1h_validation/report.html
+[2025-03-22 08:26:34] [trading] [INFO] - Validation Performance:
+[2025-03-22 08:26:34] [trading] [INFO] -   Total Return: 0.00%
+[2025-03-22 08:26:34] [trading] [INFO] -   Sharpe Ratio: 0.00
+[2025-03-22 08:26:34] [trading] [INFO] -   Max Drawdown: 0.00%
+[2025-03-22 08:26:34] [trading] [INFO] -   Win Rate: 0.00%
+[2025-03-22 08:26:34] [trading] [INFO] - Completed training for BTCUSDT 1h
+[2025-03-22 08:26:34] [trading] [INFO] - ================================================================================
+[2025-03-22 08:26:34] [trading] [INFO] - Finished at: 2025-03-22 08:26:34
+[2025-03-22 08:26:34] [trading] [INFO] - ================================================================================

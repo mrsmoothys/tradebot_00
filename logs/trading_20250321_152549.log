@@ -1,0 +1,25 @@
+[2025-03-21 15:25:49] [trading] [INFO] - ================================================================================
+[2025-03-21 15:25:49] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-21 15:25:49] [trading] [INFO] - Started at: 2025-03-21 15:25:49
+[2025-03-21 15:25:49] [trading] [INFO] - ================================================================================
+[2025-03-21 15:25:49] [trading] [INFO] - Running model training
+[2025-03-21 15:25:49] [trading] [INFO] - Training Configuration:
+[2025-03-21 15:25:49] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 15:25:49] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 15:25:49] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 15:25:49] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-21 15:28:07] [trading] [INFO] - Running validation backtest
+[2025-03-21 15:29:44] [trading] [ERROR] - Error training model for BTCUSDT 1h: BaseStrategy.__init__() got an unexpected keyword argument 'timeframe'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 298, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 183, in run_backtest
+    strategy = self.initialize_strategy(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 119, in initialize_strategy
+    strategy = MLStrategy(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 44, in __init__
+    super().__init__(
+TypeError: BaseStrategy.__init__() got an unexpected keyword argument 'timeframe'
+[2025-03-21 15:29:44] [trading] [INFO] - ================================================================================
+[2025-03-21 15:29:44] [trading] [INFO] - Finished at: 2025-03-21 15:29:44
+[2025-03-21 15:29:44] [trading] [INFO] - ================================================================================

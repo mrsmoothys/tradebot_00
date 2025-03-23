@@ -1,0 +1,31 @@
+[2025-03-22 20:11:21] [trading] [INFO] - ================================================================================
+[2025-03-22 20:11:21] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-22 20:11:21] [trading] [INFO] - Started at: 2025-03-22 20:11:21
+[2025-03-22 20:11:21] [trading] [INFO] - ================================================================================
+[2025-03-22 20:11:21] [trading] [INFO] - Running model training
+[2025-03-22 20:11:21] [trading] [INFO] - Training Configuration:
+[2025-03-22 20:11:21] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-22 20:11:21] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-22 20:11:21] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-22 20:11:21] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-22 20:48:53] [trading] [ERROR] - Error training model for BTCUSDT 1h: module 'keras._tf_keras.keras.losses' has no attribute 'mean_squared_error'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 377, in run_training
+    model = train_model(config_manager, args, symbol, timeframe, df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 207, in train_model
+    history = model.train(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 374, in train
+    history = self.model.fit(
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py", line 122, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 454, in _directional_loss
+    mse = tf.keras.losses.mean_squared_error(y_true, y_pred)
+AttributeError: module 'keras._tf_keras.keras.losses' has no attribute 'mean_squared_error'. Did you mean: 'MeanSquaredError'?
+[2025-03-22 20:48:53] [trading] [INFO] - Total training time: 0:37:32
+[2025-03-22 20:48:53] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-22 20:48:53] [trading] [INFO] - Total execution time: 0:37:32
+[2025-03-22 20:48:53] [trading] [INFO] - ================================================================================
+[2025-03-22 20:48:53] [trading] [INFO] - Finished at: 2025-03-22 20:48:53
+[2025-03-22 20:48:53] [trading] [INFO] - ================================================================================

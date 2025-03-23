@@ -1,0 +1,6 @@
+[2025-03-21 17:24:10] [trading] [INFO] - Backtest Configuration:
+[2025-03-21 17:24:10] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-21 17:24:10] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-21 17:24:10] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-21 17:24:10] [trading] [INFO] -   Initial Capital: $10000
+[2025-03-21 17:24:10] [trading] [INFO] -   Fee Rate: 0.0200%

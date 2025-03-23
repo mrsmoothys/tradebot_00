@@ -1,0 +1,27 @@
+[2025-03-22 12:40:11] [trading] [INFO] - ================================================================================
+[2025-03-22 12:40:11] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-22 12:40:11] [trading] [INFO] - Started at: 2025-03-22 12:40:11
+[2025-03-22 12:40:11] [trading] [INFO] - ================================================================================
+[2025-03-22 12:40:11] [trading] [INFO] - Running model training
+[2025-03-22 12:40:11] [trading] [INFO] - Training Configuration:
+[2025-03-22 12:40:11] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-22 12:40:11] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-22 12:40:11] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-22 12:40:11] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-22 13:16:43] [trading] [ERROR] - Error training model for BTCUSDT 1h: local variable 'X_val' referenced before assignment
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 300, in run_training
+    model = train_model(config_manager, args, symbol, timeframe, df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 199, in train_model
+    history = model.train(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 384, in train
+    validation_data=([X_val, X_symbol_val, X_timeframe_val], y_val),
+UnboundLocalError: local variable 'X_val' referenced before assignment
+[2025-03-22 13:16:43] [trading] [INFO] - Total training time: 0:36:32
+[2025-03-22 13:16:43] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-22 13:16:43] [trading] [INFO] - Total execution time: 0:36:32
+[2025-03-22 13:16:43] [trading] [INFO] - ================================================================================
+[2025-03-22 13:16:43] [trading] [INFO] - Finished at: 2025-03-22 13:16:43
+[2025-03-22 13:16:43] [trading] [INFO] - ================================================================================

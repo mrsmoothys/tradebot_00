@@ -1,0 +1,25 @@
+[2025-03-22 07:28:35] [trading] [INFO] - ================================================================================
+[2025-03-22 07:28:35] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-22 07:28:35] [trading] [INFO] - Started at: 2025-03-22 07:28:35
+[2025-03-22 07:28:35] [trading] [INFO] - ================================================================================
+[2025-03-22 07:28:35] [trading] [INFO] - Running model training
+[2025-03-22 07:28:35] [trading] [INFO] - Training Configuration:
+[2025-03-22 07:28:35] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-22 07:28:35] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-22 07:28:35] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-22 07:28:35] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-22 07:30:56] [trading] [INFO] - Running validation backtest
+[2025-03-22 07:32:34] [trading] [ERROR] - Error training model for BTCUSDT 1h: Symbol and timeframe must be provided either as parameters or set as instance attributes
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 298, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 200, in run_backtest
+    backtest_results = strategy.backtest(df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 591, in backtest
+    signals = self.generate_signals(data)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 140, in generate_signals
+    raise ValueError("Symbol and timeframe must be provided either as parameters or set as instance attributes")
+ValueError: Symbol and timeframe must be provided either as parameters or set as instance attributes
+[2025-03-22 07:32:34] [trading] [INFO] - ================================================================================
+[2025-03-22 07:32:34] [trading] [INFO] - Finished at: 2025-03-22 07:32:34
+[2025-03-22 07:32:34] [trading] [INFO] - ================================================================================
