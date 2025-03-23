@@ -109,6 +109,53 @@ class PerformanceCalculator:
         
         return returns
     
+    def _calculate_drawdowns(self, equity_curve: List[float]) -> Tuple[np.ndarray, float, int]:
+        """
+        Calculate drawdowns series, maximum drawdown, and maximum drawdown duration.
+        
+        Args:
+            equity_curve: List of equity values
+            
+        Returns:
+            Tuple of (drawdowns_series, max_drawdown_percentage, max_drawdown_duration)
+        """
+        if not equity_curve:
+            return np.array([]), 0.0, 0
+        
+        # Convert to numpy array
+        equity = np.array(equity_curve)
+        
+        # Calculate running maximum
+        running_max = np.maximum.accumulate(equity)
+        
+        # Calculate drawdown in percentage
+        drawdown = (running_max - equity) / running_max * 100
+        
+        # Maximum drawdown percentage
+        max_dd_pct = np.max(drawdown)
+        
+        # Calculate drawdown duration
+        is_drawdown = drawdown > 0
+        durations = []
+        current_duration = 0
+        
+        for i in range(len(equity)):
+            if is_drawdown[i]:
+                current_duration += 1
+            else:
+                if current_duration > 0:
+                    durations.append(current_duration)
+                    current_duration = 0
+        
+        # Add final drawdown period if still in drawdown
+        if current_duration > 0:
+            durations.append(current_duration)
+        
+        # Maximum drawdown duration
+        max_dd_duration = max(durations) if durations else 0
+        
+        return drawdown, max_dd_pct, max_dd_duration
+    
     def _annualize_return(self, returns: List[float], periods_per_year: int = 252) -> float:
         """
         Calculate annualized return.
