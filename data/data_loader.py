@@ -98,7 +98,13 @@ class DataLoader:
         
         df.rename(columns={col: col_name for col, col_name in column_mapping.items() 
                            if col in df.columns}, inplace=True)
+    
+        # Add standardization step after loading
+        df = self.standardize_data_types(df)
         
+        # Set timestamp as index if not already
+        if 'timestamp' in df.columns and not df.index.name == 'timestamp':
+            df.set_index('timestamp', inplace=True)
         # Filter by date range if provided
         if start_date:
             df = df[df.index >= pd.Timestamp(start_date)]
@@ -107,6 +113,50 @@ class DataLoader:
         
         self.logger.info(f"Loaded {len(df)} rows for {symbol} {timeframe}")
         return df
+    
+
+
+    def standardize_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Ensure consistent data types across all columns for reliable feature processing.
+        
+        Args:
+            df: Raw DataFrame with potentially mixed data types
+            
+        Returns:
+            DataFrame with standardized data types
+        """
+        # Create a deep copy to avoid modifying the original
+        standardized_df = df.copy()
+        
+        # Define column type mappings
+        timestamp_columns = ['timestamp', 'open_time', 'close_time', 'Open time', 'Close time']
+        price_columns = ['open', 'high', 'low', 'close', 'Open', 'High', 'Low', 'Close']
+        volume_columns = ['volume', 'Volume', 'quote_volume', 'taker_buy_base', 'taker_buy_quote']
+        
+        # Convert timestamp columns
+        for col in [c for c in timestamp_columns if c in standardized_df.columns]:
+            try:
+                # Handle different timestamp formats
+                if pd.api.types.is_numeric_dtype(standardized_df[col]):
+                    standardized_df[col] = pd.to_datetime(standardized_df[col], unit='ms')
+                else:
+                    standardized_df[col] = pd.to_datetime(standardized_df[col])
+            except Exception as e:
+                self.logger.warning(f"Failed to convert {col} to datetime: {e}")
+        
+        # Convert price columns to float64
+        for col in [c for c in price_columns if c in standardized_df.columns]:
+            standardized_df[col] = pd.to_numeric(standardized_df[col], errors='coerce')
+        
+        # Convert volume columns to float64
+        for col in [c for c in volume_columns if c in standardized_df.columns]:
+            standardized_df[col] = pd.to_numeric(standardized_df[col], errors='coerce')
+        
+        # Log conversion results
+        self.logger.debug(f"Data types after standardization: {standardized_df.dtypes}")
+        
+        return standardized_df
     
     def load_multi_timeframe_data(self, symbol: str, timeframes: List[str], 
                                  start_date: Optional[str] = None, 

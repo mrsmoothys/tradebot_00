@@ -23,6 +23,63 @@ class FeatureEngineer:
         self.logger = logging.getLogger(__name__)
         self.config = config_manager
         self.indicators_config = self.config.get('features.indicators', [])
+
+
+    def categorize_features(self, df: pd.DataFrame) -> Dict[str, List[str]]:
+        """
+        Categorize DataFrame columns by data type for optimized processing.
+        
+        Args:
+            df: DataFrame with mixed column types
+            
+        Returns:
+            Dictionary mapping feature types to column lists
+        """
+        feature_categories = {
+            'numeric': [],          # Numeric features for model input
+            'datetime': [],         # Date/time related features
+            'categorical': [],      # Categorical features
+            'ohlcv': [],            # Price and volume data
+            'metadata': [],         # Non-feature columns like IDs
+            'derived_targets': []   # Target variables or predictions
+        }
+        
+        # Define standard OHLCV and metadata columns
+        ohlcv_patterns = ['open', 'high', 'low', 'close', 'volume']
+        metadata_patterns = ['time', 'timestamp', 'date', 'symbol', 'trades', 'quote']
+        target_patterns = ['target', 'signal', 'prediction', 'confidence']
+        
+        # Categorize each column
+        for col in df.columns:
+            col_lower = col.lower()
+            
+            # Check for OHLCV columns
+            if any(pattern in col_lower for pattern in ohlcv_patterns):
+                feature_categories['ohlcv'].append(col)
+                continue
+                
+            # Check for metadata columns
+            if any(pattern in col_lower for pattern in metadata_patterns):
+                feature_categories['metadata'].append(col)
+                continue
+                
+            # Check for target or prediction columns
+            if any(pattern in col_lower for pattern in target_patterns):
+                feature_categories['derived_targets'].append(col)
+                continue
+                
+            # Categorize by data type
+            if pd.api.types.is_numeric_dtype(df[col]):
+                feature_categories['numeric'].append(col)
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                feature_categories['datetime'].append(col)
+            else:
+                feature_categories['categorical'].append(col)
+        
+        # Log categorization results
+        self.logger.debug(f"Feature categorization results: {', '.join([f'{k}: {len(v)}' for k, v in feature_categories.items()])}")
+        
+        return feature_categories
     
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -61,6 +118,9 @@ class FeatureEngineer:
         # Create a copy to avoid modifying the original
         result_df = df.copy()
         
+        # Categorize features to understand what we're working with
+        feature_categories = self.categorize_features(result_df)
+
         # Create progress tracker
         progress = ProgressTracker(
             name=f"Feature Generation", 
@@ -82,6 +142,15 @@ class FeatureEngineer:
                 self.logger.warning(f"Indicator method not found: _generate_{indicator_name}")
             except Exception as e:
                 self.logger.error(f"Error generating {indicator_name}: {e}")
+
+         # Re-categorize to capture newly generated features
+        updated_categories = self.categorize_features(result_df)
+        
+        # Report on feature generation
+        self.logger.info(f"Generated {len(updated_categories['numeric']) - len(feature_categories['numeric'])} new numeric features")
+        
+        # Drop NaN values
+        result_df.dropna(inplace=True)
         
         # Mark as complete
         progress.complete()
@@ -97,6 +166,7 @@ class FeatureEngineer:
             self.logger.warning(f"Error saving to cache: {e}")
         
         return result_df
+
     
     @profile
     def _generate_price_patterns(self, df: pd.DataFrame) -> pd.DataFrame:

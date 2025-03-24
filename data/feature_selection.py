@@ -26,7 +26,7 @@ class FeatureSelector:
     
     def select_features(self, df: pd.DataFrame, target_column: str = 'close') -> Tuple[pd.DataFrame, List[str]]:
         """
-        Select features using the configured method.
+        Select features using the configured method with improved type handling.
         
         Args:
             df: DataFrame with features
@@ -35,8 +35,26 @@ class FeatureSelector:
         Returns:
             Tuple of (DataFrame with selected features, list of selected feature names)
         """
-        # Get feature columns
-        feature_cols = [col for col in df.columns if col not in ['open', 'high', 'low', 'close', 'volume']]
+        # Define columns to exclude from feature selection
+        excluded_columns = [
+            # Core OHLCV columns
+            'open', 'high', 'low', 'close', 'volume',
+            
+            # Timestamp-related columns
+            'timestamp', 'open_time', 'close_time', 
+            
+            # Additional metadata columns  
+            'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote',
+            
+            # Target/prediction columns
+            'target', 'signal', 'prediction', 'confidence'
+        ]
+        
+        # Generate feature columns list, excluding non-features
+        feature_cols = [col for col in df.columns if col not in excluded_columns]
+        
+        # Log feature selection metrics
+        self.logger.info(f"Selecting from {len(feature_cols)} potential features")
         
         if not feature_cols:
             self.logger.warning("No feature columns found for selection")
@@ -48,16 +66,36 @@ class FeatureSelector:
         # Drop NaNs
         df_clean = df.dropna()
         
-        # Select method
+        # Pre-filter to ensure we only use numeric features
+        numeric_features = []
+        non_numeric_features = []
+        
+        for col in feature_cols:
+            if pd.api.types.is_numeric_dtype(df_clean[col]):
+                numeric_features.append(col)
+            else:
+                non_numeric_features.append(col)
+        
+        if non_numeric_features:
+            self.logger.warning(f"Excluded {len(non_numeric_features)} non-numeric features from selection")
+            
+        if not numeric_features:
+            self.logger.error("No numeric features available for selection")
+            return df, []
+        
+        # Select method and apply to numeric features only
         if self.method == 'correlation':
-            selected_features = self._correlation_selection(df_clean, feature_cols)
+            selected_features = self._correlation_selection(df_clean, numeric_features)
         elif self.method == 'f_regression':
-            selected_features = self._f_regression_selection(df_clean, feature_cols)
+            selected_features = self._f_regression_selection(df_clean, numeric_features)
         elif self.method == 'recursive_feature_elimination':
-            selected_features = self._rfe_selection(df_clean, feature_cols)
+            selected_features = self._rfe_selection(df_clean, numeric_features)
         else:
             self.logger.warning(f"Unknown feature selection method: {self.method}")
-            selected_features = feature_cols
+            selected_features = numeric_features
+        
+        # Log selection results
+        self.logger.info(f"Selected {len(selected_features)} features using {self.method} method")
         
         # Keep only selected features and OHLCV
         columns_to_keep = ['open', 'high', 'low', 'close', 'volume'] + selected_features
