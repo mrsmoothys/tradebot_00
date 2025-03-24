@@ -1,0 +1,27 @@
+{
+  "lookback_window": 60,
+  "prediction_horizon": 5,
+  "hidden_layers": [
+    128,
+    64,
+    32
+  ],
+  "dropout_rate": 0.2,
+  "learning_rate": 0.001,
+  "batch_size": 32,
+  "epochs": 100,
+  "model_type": "lstm",
+  "symbol_map": {
+    "BTCUSDT": 0
+  },
+  "next_symbol_id": 1,
+  "training_history": {
+    "BTCUSDT_1h": {
+      "loss": 22866316.0,
+      "mae": 4838.63037109375,
+      "mse": 45732632.0,
+      "learning_rate": 0.0010000000474974513
+    }
+  },
+  "datetime_saved": "2025-03-24T10:33:45.533311"
+}
