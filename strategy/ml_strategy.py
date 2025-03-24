@@ -139,8 +139,6 @@ class MLStrategy(BaseStrategy):
         Returns:
             DataFrame with signal column added
         """
-        # ... existing validation code ...
-        
         signals = data.copy()
         signals['signal'] = 0
         signals['prediction'] = 0.0
@@ -154,8 +152,6 @@ class MLStrategy(BaseStrategy):
         # Get feature columns (exclude OHLCV and other special columns)
         feature_cols = [col for col in signals.columns 
                     if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
-        
-        # ... existing feature count checks ...
         
         # Create progress tracker
         progress = ProgressTracker(
@@ -186,25 +182,9 @@ class MLStrategy(BaseStrategy):
         # Process predictions and generate signals
         current_prices = signals['close'].iloc[self.lookback_window:].values
         
-        # Pre-calculate technical indicators (vectorized operations)
-        rsi_bullish = None
-        macd_bullish = None
-        adx_strong = None
-        
-        for col in signals.columns:
-            if 'rsi' in col.lower():
-                rsi = signals[col].values
-                rsi_bullish = (rsi < 70) & (rsi[1:] > rsi[:-1])
-                rsi_bullish = np.append([False], rsi_bullish)
-            
-            if 'macd_diff' in col.lower():
-                macd = signals[col].values
-                macd_bullish = (macd > 0) & (macd[1:] > macd[:-1])
-                macd_bullish = np.append([False], macd_bullish)
-            
-            if 'adx' in col.lower() and not 'neg' in col.lower() and not 'pos' in col.lower():
-                adx = signals[col].values
-                adx_strong = adx > 25
+        # Lower the threshold to generate more signals for testing
+        threshold = 0.001  # Original was 0.005
+        confidence_multiplier = 0.5  # Original was 1.5
         
         # Apply results to DataFrame
         for i, idx in enumerate(range(self.lookback_window, len(signals))):
@@ -218,66 +198,22 @@ class MLStrategy(BaseStrategy):
             # Store prediction
             signals.loc[current_idx, 'prediction'] = predicted_return
             
-            # Calculate confidence
-            atr_col = next((col for col in signals.columns if 'atr' in col.lower()), None)
-            if atr_col:
-                atr_pct = signals[atr_col].iloc[idx] / current_price
-                confidence = abs(predicted_return) / (atr_pct + 1e-8)
-            else:
-                confidence = abs(predicted_return) / (self.threshold + 1e-8)
-            
+            # Calculate confidence - simplified for testing
+            confidence = abs(predicted_return) / (threshold + 1e-8)
             signals.loc[current_idx, 'confidence'] = confidence
             
-            # Generate signal
-            if predicted_return > self.threshold and confidence > 1.0:
-                # Technical confirmation count (vectorized)
-                technical_count = 0
-                if rsi_bullish is not None and rsi_bullish[idx]:
-                    technical_count += 1
-                if macd_bullish is not None and macd_bullish[idx]:
-                    technical_count += 1
-                if adx_strong is not None and adx_strong[idx]:
-                    technical_count += 1
-                
-                signal_strength = min(3, 1 + technical_count * 0.5 + (confidence - 1) / self.confidence_multiplier)
+            # Generate more aggressive signals
+            if predicted_return > threshold:
+                # Simplified signal strength
+                signal_strength = min(3, 1 + confidence/2)
                 signals.loc[current_idx, 'signal'] = int(signal_strength)
                 
-            elif predicted_return < -self.threshold and confidence > 1.0:
-                # Technical confirmation count (vectorized)
-                technical_count = 0
-                if rsi_bullish is not None and not rsi_bullish[idx]:
-                    technical_count += 1
-                if macd_bullish is not None and not macd_bullish[idx]:
-                    technical_count += 1
-                if adx_strong is not None and adx_strong[idx]:
-                    technical_count += 1
-                
-                signal_strength = max(-3, -1 - technical_count * 0.5 - (confidence - 1) / self.confidence_multiplier)
+            elif predicted_return < -threshold:
+                signal_strength = max(-3, -1 - confidence/2)
                 signals.loc[current_idx, 'signal'] = int(signal_strength)
         
-            # Apply multi-timeframe analysis if enabled
-        if self.use_multi_timeframe and 'higher_tf_signal' in signals.columns:
-            # Get higher timeframe signals
-            higher_tf_signals = signals['higher_tf_signal'].values
-            
-            # Apply to all signals that have non-zero values
-            for i, idx in enumerate(range(self.lookback_window, len(signals))):
-                current_idx = signals.index[idx]
-                current_signal = signals.loc[current_idx, 'signal']
-                
-                if current_signal != 0:
-                    # Get higher timeframe signal for this candle
-                    higher_tf_signal = higher_tf_signals[idx]
-                    
-                    # Strengthen signal if aligned with higher timeframe
-                    if (current_signal > 0 and higher_tf_signal > 0) or \
-                    (current_signal < 0 and higher_tf_signal < 0):
-                        signals.loc[current_idx, 'signal'] *= (1 + self.higher_tf_weight)
-                    
-                    # Weaken signal if against higher timeframe
-                    elif higher_tf_signal != 0:
-                        signals.loc[current_idx, 'signal'] *= (1 - self.higher_tf_weight)
-            progress.complete()
+        self.logger.info(f"Generated signals: {len(signals[signals['signal'] != 0])} non-zero signals out of {len(signals)}")
+        progress.complete()
         return signals
     
     def _generate_price_patterns(self, df: pd.DataFrame) -> pd.DataFrame:

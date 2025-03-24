@@ -390,6 +390,16 @@ def run_training(config_manager=None, args=None):
                     end_date=None
                 )
                 
+                # Check signals
+                if symbol in results and timeframe in results[symbol]:
+                    if 'signals' in results[symbol][timeframe]:
+                        signals_df = results[symbol][timeframe]['signals']
+                        non_zero_signals = signals_df[signals_df['signal'] != 0]
+                        logger.info(f"Validation signals stats: {len(non_zero_signals)} non-zero signals out of {len(signals_df)} bars")
+                        logger.info(f"Signal distribution: {signals_df['signal'].value_counts().to_dict()}")
+                    else:
+                        logger.warning("No 'signals' key in results")
+
                 # Generate performance report
                 logger.info("Generating performance report")
                 report_generator = PerformanceReport(config_manager)

@@ -1,9 +1,7 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Union, Any, Tuple  # Added Tuple here
-from scipy import stats
-import matplotlib.pyplot as plt
-
+import logging
+from typing import Dict, List, Optional, Union, Any, Tuple
 
 class PerformanceCalculator:
     """
@@ -12,7 +10,7 @@ class PerformanceCalculator:
     
     def __init__(self):
         """Initialize the performance calculator."""
-        pass
+        self.logger = logging.getLogger(__name__)
     
     def calculate_metrics(self, equity_curve: List[float], trades: List[Dict[str, Any]], 
                    benchmark_returns: Optional[List[float]] = None) -> Dict[str, float]:
@@ -62,7 +60,8 @@ class PerformanceCalculator:
         metrics['sortino_ratio'] = self._calculate_sortino_ratio(returns)
         
         # Drawdown metrics
-        drawdowns, max_dd_pct, max_dd_duration = self._calculate_drawdowns(equity_curve)
+        max_dd_pct = self._calculate_max_drawdown(equity_curve)
+        max_dd_duration = self._calculate_max_drawdown_duration(equity_curve)
         metrics['max_drawdown'] = float(max_dd_pct)
         metrics['max_drawdown_duration'] = int(max_dd_duration)
         metrics['calmar_ratio'] = self._calculate_calmar_ratio(returns, max_dd_pct)
@@ -110,52 +109,60 @@ class PerformanceCalculator:
         
         return returns
     
-    def _calculate_drawdowns(self, equity_curve: List[float]) -> Tuple[np.ndarray, float, int]:
+    def _calculate_max_drawdown(self, equity_curve: List[float]) -> float:
         """
-        Calculate drawdowns series, maximum drawdown, and maximum drawdown duration.
+        Calculate maximum drawdown.
         
         Args:
             equity_curve: List of equity values
             
         Returns:
-            Tuple of (drawdowns_series, max_drawdown_percentage, max_drawdown_duration)
+            Maximum drawdown as a percentage
         """
         if not equity_curve:
-            return np.array([]), 0.0, 0
-        
-        # Convert to numpy array
-        equity = np.array(equity_curve)
+            return 0.0
         
         # Calculate running maximum
-        running_max = np.maximum.accumulate(equity)
+        running_max = np.maximum.accumulate(equity_curve)
+        drawdown = (running_max - equity_curve) / running_max * 100
         
-        # Calculate drawdown in percentage
-        drawdown = (running_max - equity) / running_max * 100
+        return np.max(drawdown)
+    
+    def _calculate_max_drawdown_duration(self, equity_curve: List[float]) -> int:
+        """
+        Calculate maximum drawdown duration in periods.
         
-        # Maximum drawdown percentage
-        max_dd_pct = np.max(drawdown)
+        Args:
+            equity_curve: List of equity values
+            
+        Returns:
+            Maximum drawdown duration in periods
+        """
+        if not equity_curve:
+            return 0
         
-        # Calculate drawdown duration
+        # Calculate running maximum
+        running_max = np.maximum.accumulate(equity_curve)
+        drawdown = running_max - equity_curve
+        
+        # Find periods where drawdown is occurring
         is_drawdown = drawdown > 0
+        
+        if not any(is_drawdown):
+            return 0
+        
+        # Calculate drawdown durations
         durations = []
         current_duration = 0
         
-        for i in range(len(equity)):
+        for i in range(len(equity_curve)):
             if is_drawdown[i]:
                 current_duration += 1
-            else:
-                if current_duration > 0:
+                if i == len(equity_curve) - 1 or (i < len(equity_curve) - 1 and not is_drawdown[i+1]):
                     durations.append(current_duration)
                     current_duration = 0
         
-        # Add final drawdown period if still in drawdown
-        if current_duration > 0:
-            durations.append(current_duration)
-        
-        # Maximum drawdown duration
-        max_dd_duration = max(durations) if durations else 0
-        
-        return drawdown, max_dd_pct, max_dd_duration
+        return max(durations) if durations else 0
     
     def _annualize_return(self, returns: List[float], periods_per_year: int = 252) -> float:
         """
@@ -251,61 +258,6 @@ class PerformanceCalculator:
         
         return excess_return / downside_risk * np.sqrt(periods_per_year)
     
-    def _calculate_max_drawdown(self, equity_curve: List[float]) -> float:
-        """
-        Calculate maximum drawdown.
-        
-        Args:
-            equity_curve: List of equity values
-            
-        Returns:
-            Maximum drawdown as a percentage
-        """
-        if not equity_curve:
-            return 0.0
-        
-        # Calculate running maximum
-        running_max = np.maximum.accumulate(equity_curve)
-        drawdown = (running_max - equity_curve) / running_max * 100
-        
-        return np.max(drawdown)
-    
-    def _calculate_max_drawdown_duration(self, equity_curve: List[float]) -> int:
-        """
-        Calculate maximum drawdown duration in periods.
-        
-        Args:
-            equity_curve: List of equity values
-            
-        Returns:
-            Maximum drawdown duration in periods
-        """
-        if not equity_curve:
-            return 0
-        
-        # Calculate running maximum
-        running_max = np.maximum.accumulate(equity_curve)
-        drawdown = running_max - equity_curve
-        
-        # Find periods where drawdown is occurring
-        is_drawdown = drawdown > 0
-        
-        if not any(is_drawdown):
-            return 0
-        
-        # Calculate drawdown durations
-        durations = []
-        current_duration = 0
-        
-        for i in range(len(equity_curve)):
-            if is_drawdown[i]:
-                current_duration += 1
-                if i == len(equity_curve) - 1 or not is_drawdown[i+1]:
-                    durations.append(current_duration)
-                    current_duration = 0
-        
-        return max(durations) if durations else 0
-    
     def _calculate_calmar_ratio(self, returns: List[float], max_drawdown: float, 
                              periods_per_year: int = 252) -> float:
         """
@@ -378,7 +330,7 @@ class PerformanceCalculator:
         metrics['largest_loser'] = min((t.get('profit_amount', 0) for t in trades), default=0.0)
         
         # Trade duration metrics if available
-        if 'entry_time' in trades[0] and 'exit_time' in trades[0]:
+        if trades and 'entry_time' in trades[0] and 'exit_time' in trades[0]:
             durations = []
             for trade in trades:
                 entry_time = trade['entry_time']
@@ -449,156 +401,3 @@ class PerformanceCalculator:
             metrics['excess_return'] = excess_return
         
         return metrics
-    
-    def plot_drawdowns(self, equity_curve: List[float], top_n: int = 5, figsize: tuple = (12, 8)) -> None:
-        """
-        Plot the top N drawdowns.
-        
-        Args:
-            equity_curve: List of equity values
-            top_n: Number of top drawdowns to plot
-            figsize: Figure size
-        """
-        if not equity_curve:
-            return
-        
-        # Convert to numpy array
-        equity = np.array(equity_curve)
-        
-        # Calculate running maximum
-        running_max = np.maximum.accumulate(equity)
-        drawdown = (running_max - equity) / running_max * 100
-        
-        # Find drawdown periods
-        is_drawdown = drawdown > 0
-        
-        # Find drawdown start and end indices
-        drawdown_periods = []
-        i = 0
-        while i < len(drawdown):
-            if is_drawdown[i]:
-                start_idx = i
-                while i < len(drawdown) and is_drawdown[i]:
-                    i += 1
-                end_idx = i - 1
-                
-                # Calculate max drawdown during this period
-                max_dd = np.max(drawdown[start_idx:end_idx+1])
-                drawdown_periods.append((start_idx, end_idx, max_dd))
-            else:
-                i += 1
-        
-        # Sort by drawdown size (largest first)
-        drawdown_periods.sort(key=lambda x: x[2], reverse=True)
-        
-        # Keep only top N
-        drawdown_periods = drawdown_periods[:top_n]
-        
-        # Plot
-        plt.figure(figsize=figsize)
-        
-        # Plot equity curve
-        plt.subplot(2, 1, 1)
-        plt.plot(equity, label='Equity Curve')
-        
-        # Highlight drawdown periods
-        colors = plt.cm.tab10.colors
-        for i, (start_idx, end_idx, max_dd) in enumerate(drawdown_periods):
-            color = colors[i % len(colors)]
-            plt.fill_between(range(start_idx, end_idx+1), equity[start_idx:end_idx+1], 
-                           running_max[start_idx:end_idx+1], color=color, alpha=0.3,
-                           label=f'DD #{i+1}: {max_dd:.2f}%')
-        
-        plt.title('Equity Curve with Top Drawdowns')
-        plt.legend()
-        plt.grid(True)
-        
-        # Plot drawdown values
-        plt.subplot(2, 1, 2)
-        plt.plot(drawdown, color='red', label='Drawdown')
-        
-        # Highlight drawdown periods
-        for i, (start_idx, end_idx, max_dd) in enumerate(drawdown_periods):
-            color = colors[i % len(colors)]
-            plt.fill_between(range(start_idx, end_idx+1), 0, drawdown[start_idx:end_idx+1], 
-                           color=color, alpha=0.3,
-                           label=f'DD #{i+1}: {max_dd:.2f}%')
-        
-        plt.title('Drawdowns')
-        plt.xlabel('Bar')
-        plt.ylabel('Drawdown (%)')
-        plt.legend()
-        plt.grid(True)
-        
-        plt.tight_layout()
-        plt.show()
-    
-    def plot_trade_distribution(self, trades: List[Dict[str, Any]], figsize: tuple = (14, 10)) -> None:
-        """
-        Plot trade profit distribution and other trade metrics.
-        
-        Args:
-            trades: List of trade dictionaries
-            figsize: Figure size
-        """
-        if not trades:
-            return
-        
-        profit_percentages = [t.get('profit_percentage', 0) for t in trades]
-        profit_amounts = [t.get('profit_amount', 0) for t in trades]
-        durations = []
-        
-        if 'entry_time' in trades[0] and 'exit_time' in trades[0]:
-            for trade in trades:
-                entry_time = trade['entry_time']
-                exit_time = trade['exit_time']
-                
-                if isinstance(entry_time, str):
-                    entry_time = pd.to_datetime(entry_time)
-                if isinstance(exit_time, str):
-                    exit_time = pd.to_datetime(exit_time)
-                
-                duration = (exit_time - entry_time).total_seconds() / 3600  # hours
-                durations.append(duration)
-        
-        plt.figure(figsize=figsize)
-        
-        # Profit distribution
-        plt.subplot(2, 2, 1)
-        plt.hist(profit_percentages, bins=20, color='skyblue', edgecolor='black')
-        plt.axvline(0, color='red', linestyle='--')
-        plt.title('Profit/Loss Distribution (%)')
-        plt.xlabel('Profit/Loss (%)')
-        plt.ylabel('Frequency')
-        plt.grid(True)
-        
-        # Profit by trade number
-        plt.subplot(2, 2, 2)
-        plt.scatter(range(len(trades)), profit_percentages, alpha=0.6)
-        plt.axhline(0, color='red', linestyle='--')
-        plt.title('Profit/Loss by Trade Number')
-        plt.xlabel('Trade Number')
-        plt.ylabel('Profit/Loss (%)')
-        plt.grid(True)
-        
-        # Cumulative profit
-        plt.subplot(2, 2, 3)
-        cumulative_profit = np.cumsum(profit_amounts)
-        plt.plot(cumulative_profit)
-        plt.title('Cumulative Profit/Loss')
-        plt.xlabel('Trade Number')
-        plt.ylabel('Cumulative Profit/Loss')
-        plt.grid(True)
-        
-        # Trade duration vs profit (if available)
-        if durations:
-            plt.subplot(2, 2, 4)
-            plt.scatter(durations, profit_percentages, alpha=0.6)
-            plt.axhline(0, color='red', linestyle='--')
-            plt.title('Profit/Loss vs Trade Duration')
-            plt.xlabel('Duration (hours)')
-            plt.ylabel('Profit/Loss (%)')
-            plt.grid(True)
-        
-        plt.tight_layout()
-        plt.show()
