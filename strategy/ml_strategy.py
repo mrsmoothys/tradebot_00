@@ -663,6 +663,7 @@ class MLStrategy(BaseStrategy):
         return position
 
     @profile
+    # In ml_strategy.py, update the backtest method to properly update equity curve
     def backtest(self, data: pd.DataFrame) -> Dict[str, Any]:
         """
         Run backtest using the strategy on historical data.
@@ -688,7 +689,7 @@ class MLStrategy(BaseStrategy):
         
         # Initialize tracking variables
         equity_curve = [initial_capital]
-        current_positions = {}
+        daily_equity = {}
         
         # Create progress tracker for backtesting
         progress = ProgressTracker(
@@ -721,7 +722,15 @@ class MLStrategy(BaseStrategy):
                     )
                     
                     if should_close:
-                        self.close_position(position_id, current_price, current_time, reason)
+                        # Track capital before close
+                        capital_before = self.capital
+                        
+                        # Close position
+                        closed_position = self.close_position(position_id, current_price, current_time, reason)
+                        
+                        # Log capital change
+                        capital_after = self.capital
+                        self.logger.debug(f"Capital change from trade: ${capital_after - capital_before:.2f}")
             
             progress.update(1, timestamp)
 
@@ -735,9 +744,13 @@ class MLStrategy(BaseStrategy):
                 elif current_signal <= -2:  # Strong sell signal
                     self.open_position('short', current_price, current_time, signals.iloc[:i+1])
             
-            # Update equity curve
+            # Update equity curve for each candle
             current_equity = self.calculate_equity(current_price)
             equity_curve.append(current_equity)
+            
+            # Also track daily equity (for metrics calculation)
+            day_key = timestamp.strftime('%Y-%m-%d')
+            daily_equity[day_key] = current_equity
         
         # Close any remaining open positions at the last price
         last_price = signals['close'].iloc[-1]
@@ -746,6 +759,17 @@ class MLStrategy(BaseStrategy):
         for position_id, position in list(self.positions.items()):
             if position['status'] == 'open':
                 self.close_position(position_id, last_price, last_time, 'end_of_data')
+        
+        # Final equity value after all positions closed
+        final_equity = self.capital
+        equity_curve[-1] = final_equity
+        
+        # Log trade summary
+        total_profit = sum(t.get('net_profit', 0) for t in self.trades)
+        win_count = sum(1 for t in self.trades if t.get('profit_pct', 0) > 0)
+        self.logger.info(f"Backtest summary: {len(self.trades)} trades, {win_count} wins, total profit: ${total_profit:.2f}")
+        self.logger.info(f"Initial capital: ${initial_capital:.2f}, Final capital: ${final_equity:.2f}")
+        self.logger.info(f"Return: {(final_equity/initial_capital - 1)*100:.2f}%")
         
         # Calculate performance metrics
         self.performance_metrics = self.calculate_performance_metrics(

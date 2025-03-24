@@ -220,6 +220,29 @@ class BacktestEngine:
                 # Verify backtest results integrity
                 self._verify_backtest_results(symbol, timeframe, backtest_results)
                 
+                # Debug trades
+                trades = backtest_results.get('trades', [])
+                if trades:
+                    self.logger.info(f"Received {len(trades)} trades from strategy")
+                    # Log sample of first and last trade
+                    if len(trades) > 0:
+                        self.logger.info(f"First trade: {trades[0]}")
+                        self.logger.info(f"Last trade: {trades[-1]}")
+                    
+                    # Verify trade data integrity
+                    self._verify_trades_for_performance(trades)
+                else:
+                    self.logger.warning(f"No trades generated for {symbol} {timeframe}")
+
+                # Debug equity curve
+                equity_curve = backtest_results.get('equity_curve', [])
+                if equity_curve:
+                    self.logger.info(f"Equity curve starts at {equity_curve[0]:.2f} and ends at {equity_curve[-1]:.2f}")
+                    self.logger.info(f"Return from equity curve: {(equity_curve[-1]/equity_curve[0] - 1)*100:.2f}%")
+                else:
+                    self.logger.warning(f"No equity curve generated for {symbol} {timeframe}")
+
+
                 # Save strategy instance
                 strategy_key = f"{symbol}_{timeframe}"
                 self.strategies[strategy_key] = strategy
@@ -267,6 +290,30 @@ class BacktestEngine:
         progress.complete()
         
         return results
+    
+    # In backtest_engine.py, add this before calculating performance metrics
+    def _verify_trades_for_performance(self, trades):
+        """Verify trades are in the correct format for performance calculation."""
+        if not trades:
+            self.logger.warning("No trades to verify for performance calculation")
+            return
+
+        # Check required fields
+        required_fields = ['profit_pct', 'profit_amount', 'net_profit', 'entry_time', 'exit_time']
+        for field in required_fields:
+            if field not in trades[0]:
+                self.logger.error(f"Trade data missing required field: {field}")
+                
+        # Log trade summary for debugging
+        total_profit = sum(t.get('net_profit', 0) for t in trades)
+        win_count = sum(1 for t in trades if t.get('profit_pct', 0) > 0)
+        self.logger.info(f"Trade summary: {len(trades)} trades, {win_count} wins, total profit: ${total_profit:.2f}")
+        
+        # Convert datetime objects to strings if needed
+        for trade in trades:
+            for time_field in ['entry_time', 'exit_time']:
+                if time_field in trade and not isinstance(trade[time_field], str):
+                    trade[time_field] = str(trade[time_field])
 
     def _verify_backtest_results(self, symbol: str, timeframe: str, results: Dict[str, Any]) -> None:
         """

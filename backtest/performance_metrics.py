@@ -277,75 +277,101 @@ class PerformanceCalculator:
         annualized_return = self._annualize_return(returns, periods_per_year)
         return annualized_return / (max_drawdown / 100)
     
-    def _calculate_trade_metrics(self, trades: List[Dict[str, Any]]) -> Dict[str, float]:
+    # In performance_metrics.py, update the calculate_metrics function
+    def calculate_metrics(self, equity_curve: List[float], trades: List[Dict[str, Any]], 
+                    benchmark_returns: Optional[List[float]] = None) -> Dict[str, float]:
         """
-        Calculate metrics related to individual trades.
+        Calculate comprehensive performance metrics.
         
         Args:
+            equity_curve: List of equity values over time
             trades: List of trade dictionaries
+            benchmark_returns: List of benchmark returns (optional)
             
         Returns:
-            Dictionary of trade metrics
+            Dictionary of performance metrics
         """
         metrics = {}
         
-        # Basic trade metrics
-        metrics['num_trades'] = len(trades)
-        
-        if not trades:
+        # Ensure we have valid equity curve data
+        if not equity_curve or len(equity_curve) < 2:
+            self.logger.warning("Empty or insufficient equity curve, returning minimal metrics")
             return {
-                'num_trades': 0,
+                'initial_capital': equity_curve[0] if equity_curve else 0,
+                'final_capital': equity_curve[-1] if equity_curve else 0,
+                'total_return': 0.0,
+                'total_profit': 0.0,
+                'sharpe_ratio': 0.0,
+                'sortino_ratio': 0.0,
+                'max_drawdown': 0.0,
                 'win_rate': 0.0,
                 'profit_factor': 0.0,
-                'avg_profit_per_trade': 0.0,
-                'avg_winning_trade': 0.0,
-                'avg_losing_trade': 0.0,
-                'largest_winner': 0.0,
-                'largest_loser': 0.0,
-                'avg_trade_duration': 0.0
+                'num_trades': len(trades) if trades else 0
             }
         
-        # Separate winning and losing trades
-        winning_trades = [t for t in trades if t.get('profit_amount', 0) > 0]
-        losing_trades = [t for t in trades if t.get('profit_amount', 0) <= 0]
+        # Extract initial and final values
+        metrics['initial_capital'] = float(equity_curve[0])
+        metrics['final_capital'] = float(equity_curve[-1])
+        metrics['total_return'] = float((metrics['final_capital'] / metrics['initial_capital'] - 1) * 100)
+        metrics['total_profit'] = float(metrics['final_capital'] - metrics['initial_capital'])
         
-        # Win rate
-        metrics['win_rate'] = len(winning_trades) / len(trades) * 100
+        # Calculate returns
+        returns = self._calculate_returns(equity_curve)
         
-        # Profit metrics
-        gross_profit = sum(t.get('profit_amount', 0) for t in winning_trades)
-        gross_loss = abs(sum(t.get('profit_amount', 0) for t in losing_trades))
+        # Basic returns metrics (check for empty returns)
+        if returns:
+            metrics['annualized_return'] = self._annualize_return(returns)
+            metrics['volatility'] = self._calculate_volatility(returns)
+            metrics['annualized_volatility'] = self._annualize_volatility(returns)
+            metrics['sharpe_ratio'] = self._calculate_sharpe_ratio(returns)
+            metrics['sortino_ratio'] = self._calculate_sortino_ratio(returns)
+        else:
+            metrics['annualized_return'] = 0.0
+            metrics['volatility'] = 0.0
+            metrics['annualized_volatility'] = 0.0
+            metrics['sharpe_ratio'] = 0.0
+            metrics['sortino_ratio'] = 0.0
         
-        metrics['gross_profit'] = gross_profit
-        metrics['gross_loss'] = gross_loss
-        metrics['profit_factor'] = gross_profit / gross_loss if gross_loss > 0 else float('inf')
+        # Drawdown metrics
+        max_dd_pct = self._calculate_max_drawdown(equity_curve)
+        max_dd_duration = self._calculate_max_drawdown_duration(equity_curve)
+        metrics['max_drawdown'] = float(max_dd_pct)
+        metrics['max_drawdown_duration'] = int(max_dd_duration)
+        metrics['calmar_ratio'] = self._calculate_calmar_ratio(returns, max_dd_pct)
         
-        # Average metrics
-        metrics['avg_profit_per_trade'] = sum(t.get('profit_amount', 0) for t in trades) / len(trades)
-        metrics['avg_winning_trade'] = gross_profit / len(winning_trades) if winning_trades else 0.0
-        metrics['avg_losing_trade'] = -gross_loss / len(losing_trades) if losing_trades else 0.0
-        
-        # Extreme values
-        metrics['largest_winner'] = max((t.get('profit_amount', 0) for t in trades), default=0.0)
-        metrics['largest_loser'] = min((t.get('profit_amount', 0) for t in trades), default=0.0)
-        
-        # Trade duration metrics if available
-        if trades and 'entry_time' in trades[0] and 'exit_time' in trades[0]:
-            durations = []
-            for trade in trades:
-                entry_time = trade['entry_time']
-                exit_time = trade['exit_time']
-                
-                if isinstance(entry_time, str):
-                    entry_time = pd.to_datetime(entry_time)
-                if isinstance(exit_time, str):
-                    exit_time = pd.to_datetime(exit_time)
-                
-                duration = (exit_time - entry_time).total_seconds() / 3600  # hours
-                durations.append(duration)
+        # Log trade stats
+        if trades:
+            self.logger.info(f"Processing {len(trades)} trades for metrics")
+        else:
+            self.logger.warning("No trades to process for metrics")
             
-            metrics['avg_trade_duration'] = np.mean(durations)
-            metrics['max_trade_duration'] = np.max(durations)
+        # Trade metrics if available
+        if trades and len(trades) > 0:
+            # Check for any None values in profit_pct
+            if any(t.get('profit_pct') is None for t in trades):
+                self.logger.warning("Some trades have None profit_pct values")
+                # Fix None values
+                for trade in trades:
+                    if trade.get('profit_pct') is None:
+                        trade['profit_pct'] = 0.0
+            
+            trade_metrics = self._calculate_trade_metrics(trades)
+            metrics.update(trade_metrics)
+            
+            # Verify trade metrics are calculated correctly
+            self.logger.info(f"Calculated trade metrics: {len(trades)} trades, "
+                        f"Win rate: {trade_metrics.get('win_rate', 0):.2f}%, "
+                        f"Profit factor: {trade_metrics.get('profit_factor', 0):.2f}")
+        else:
+            self.logger.warning("No trades provided for metrics calculation")
+            metrics['num_trades'] = 0
+            metrics['win_rate'] = 0.0
+            metrics['profit_factor'] = 0.0
+        
+        # Ensure all values are proper numeric types
+        for key in metrics:
+            if isinstance(metrics[key], (np.float32, np.float64, np.int32, np.int64)):
+                metrics[key] = float(metrics[key])
         
         return metrics
     
