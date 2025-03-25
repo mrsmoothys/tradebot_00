@@ -128,7 +128,7 @@ def main():
     
     elif args.command == 'optimize':
         logger.info("Running strategy optimization")
-        from optimization.hyperparameter_tuning import HyperparameterTuner
+        from optimization.hyperparameter_tunning import HyperparameterTuner
         from optimization.feature_optimizer import FeatureOptimizer
         
         # Determine what to optimize (default: strategy parameters)

@@ -131,70 +131,56 @@ class MLStrategy(BaseStrategy):
     @profile
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Generate trading signals using vectorized operations for optimal performance.
-        
-        Args:
-            data: Market data DataFrame
-                
-        Returns:
-            DataFrame with signal column added
+        Enhanced signal generation with lower thresholds and improved confidence metrics.
         """
-        # Initialization with pre-allocation
         signals = data.copy()
-        n_samples = len(signals)
+        signals['signal'] = 0
+        signals['prediction'] = 0.0
+        signals['confidence'] = 0.0
         
-        if n_samples <= self.lookback_window:
-            self.logger.warning(f"Insufficient data for prediction: {n_samples} samples, {self.lookback_window} required")
-            return signals.assign(signal=0, prediction=0.0, confidence=0.0)
-        
-        # Extract feature columns once
+        # Process eligible data points
         feature_cols = [col for col in signals.columns 
                     if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
         
-        # Pre-allocate arrays for optimization
-        valid_indices = range(self.lookback_window, n_samples)
-        n_predictions = len(valid_indices)
-        predictions_array = np.zeros(n_predictions)
-        confidence_array = np.zeros(n_predictions)
-        signals_array = np.zeros(n_predictions)
+        # Lower threshold dramatically to generate more signals for testing
+        threshold = 0.0005  # Reduced from original 0.005
         
-        # Create input windows efficiently using strided operations
-        X = np.zeros((n_predictions, self.lookback_window, len(feature_cols)))
-        for i, idx in enumerate(valid_indices):
-            X[i] = signals.iloc[idx-self.lookback_window:idx][feature_cols].values
+        # Create input windows for batch prediction
+        input_windows = []
+        for i in range(self.lookback_window, len(signals)):
+            window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
+            input_windows.append(window_data)
         
-        # Batch prediction (already optimized)
-        try:
-            all_predictions = self.model.predict(X, self.symbol, self.timeframe, verbose=0)
+        input_windows = np.array(input_windows)
+        
+        # Generate predictions in one batch
+        all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
+        
+        # Process predictions with lower threshold
+        current_prices = signals['close'].iloc[self.lookback_window:].values
+        
+        for i, idx in enumerate(range(self.lookback_window, len(signals))):
+            current_idx = signals.index[idx]
+            current_price = current_prices[i]
             
-            # Current prices for prediction normalization
-            current_prices = signals['close'].iloc[self.lookback_window:].values
+            # Get prediction from batch results
+            prediction = all_predictions[i][-1]
+            predicted_return = (prediction / current_price) - 1
             
-            # Vectorized prediction processing
-            predictions = all_predictions[:, -1]  # Last value in horizon
-            predicted_returns = (predictions / current_prices) - 1
+            # Store prediction
+            signals.loc[current_idx, 'prediction'] = predicted_return
             
-            # Vector threshold operations
-            threshold = 0.001  # Lowered for more signals
-            confidence_values = np.abs(predicted_returns) / (threshold + 1e-8)
+            # Calculate confidence - simplified
+            confidence = abs(predicted_return) / (threshold + 1e-8)
+            signals.loc[current_idx, 'confidence'] = confidence
             
-            # Generate signals vectorized
-            buy_mask = predicted_returns > threshold
-            sell_mask = predicted_returns < -threshold
-            
-            # Compute signal strength vectorized
-            signals_array = np.zeros(n_predictions)
-            signals_array[buy_mask] = np.minimum(3, 1 + confidence_values[buy_mask]/2)
-            signals_array[sell_mask] = np.maximum(-3, -1 - confidence_values[sell_mask]/2)
-            
-            # Apply results efficiently
-            idx_array = signals.index[self.lookback_window:]
-            signals.loc[idx_array, 'prediction'] = predicted_returns
-            signals.loc[idx_array, 'confidence'] = confidence_values
-            signals.loc[idx_array, 'signal'] = signals_array.astype(int)
-            
-        except Exception as e:
-            self.logger.error(f"Prediction error: {str(e)}", exc_info=True)
+            # Generate more signals with lower threshold
+            if predicted_return > threshold:
+                signal_strength = min(3, 1 + int(confidence))
+                signals.loc[current_idx, 'signal'] = int(signal_strength)
+            elif predicted_return < -threshold:
+                signal_strength = max(-3, -1 - int(confidence))
+                signals.loc[current_idx, 'signal'] = int(signal_strength)
         
         return signals
     

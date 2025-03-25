@@ -1,0 +1,42 @@
+[2025-03-24 17:12:33] [trading] [INFO] - ================================================================================
+[2025-03-24 17:12:33] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-24 17:12:33] [trading] [INFO] - Started at: 2025-03-24 17:12:33
+[2025-03-24 17:12:33] [trading] [INFO] - ================================================================================
+[2025-03-24 17:12:33] [trading] [INFO] - Running model training
+[2025-03-24 17:12:33] [trading] [INFO] - Training Configuration:
+[2025-03-24 17:12:33] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-24 17:12:33] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-24 17:12:33] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-24 17:12:33] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-24 18:00:06] [trading] [INFO] - Running validation backtest
+[2025-03-24 18:21:57] [trading] [ERROR] - Error training model for BTCUSDT 1h: Invalid dtype: object
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 385, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 218, in run_backtest
+    backtest_results = strategy.backtest(df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 644, in backtest
+    signals = self.generate_signals(data)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 157, in generate_signals
+    all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 437, in predict
+    predictions = self.model.predict([X, X_symbol, X_timeframe], verbose=verbose)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py", line 122, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/optree/ops.py", line 766, in tree_map
+    return treespec.unflatten(map(func, *flat_args))
+ValueError: Invalid dtype: object
+[2025-03-24 18:21:57] [trading] [INFO] - Total training time: 1:09:24
+[2025-03-24 18:21:57] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-24 18:21:57] [trading] [INFO] - Total execution time: 1:09:24
+[2025-03-24 18:21:57] [trading] [INFO] - ================================================================================
+[2025-03-24 18:21:57] [trading] [INFO] - Finished at: 2025-03-24 18:21:57
+[2025-03-24 18:21:57] [trading] [INFO] - ================================================================================
