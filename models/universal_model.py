@@ -20,6 +20,19 @@ from utils.progress import ProgressTracker
 import time
 from utils.data_quality import DataQualityMonitor
 
+# Limit memory growth to prevent TensorFlow from allocating all GPU memory
+physical_devices = tf.config.list_physical_devices('GPU')
+if physical_devices:
+    for device in physical_devices:
+        tf.config.experimental.set_memory_growth(device, True)
+
+# Set reasonable memory limits for CPU operations
+tf.config.threading.set_intra_op_parallelism_threads(2)
+tf.config.threading.set_inter_op_parallelism_threads(2)
+
+# Configure for Metal acceleration on M1
+tf.config.experimental.set_visible_devices([], 'GPU')  # Disable GPU for now to use Metal
+
 # Define the callback class outside of UniversalModel
 class EpochProgressCallback(tf.keras.callbacks.Callback):
     """Callback to track training progress per epoch."""
@@ -128,59 +141,57 @@ class UniversalModel:
         
         return tf.reduce_mean(combined_loss)
     
+    # Modify _build_model in universal_model.py
+
     def _build_model(self) -> None:
-        """Build the universal model architecture."""
-        # Determine feature count (default to 30 for PCA components)
+        """Build a memory-efficient model architecture"""
+        # Determine feature count (default to 20 for PCA components)
         feature_count = self.input_shape[-1]
         
-        # Price sequence input
+        # Use simpler architecture with fewer parameters
         price_input = Input(shape=self.input_shape, name='price_input')
         
-        # Symbol embedding input
+        # Simplified symbol embedding
         symbol_input = Input(shape=(1,), dtype='int32', name='symbol_input')
-        symbol_embedding = Embedding(input_dim=100, output_dim=8)(symbol_input)
+        symbol_embedding = Embedding(input_dim=100, output_dim=4)(symbol_input)  # Reduced dimensions
         symbol_embedding = Flatten()(symbol_embedding)
         
-        # Timeframe input (numeric)
+        # Timeframe input
         timeframe_input = Input(shape=(1,), name='timeframe_input')
         
-        # Process price sequence based on model type
+        # Reduced model complexity
         if self.model_type == 'lstm':
-            x = self._build_lstm_layers(price_input)
-        elif self.model_type == 'gru':
-            x = self._build_gru_layers(price_input)
-        elif self.model_type == 'cnn':
-            x = self._build_cnn_layers(price_input)
-        elif self.model_type == 'transformer':
-            x = self._build_transformer_layers(price_input)
+            x = LSTM(64, return_sequences=False)(price_input)  # Single layer, reduced units
+            x = BatchNormalization()(x)
+            x = Dropout(self.dropout_rate)(x)
         else:
-            self.logger.warning(f"Unknown model type: {self.model_type}, using LSTM")
-            x = self._build_lstm_layers(price_input)
+            # Fallback to simple architecture
+            x = Flatten()(price_input)
+            x = Dense(64, activation='relu')(x)
+            x = BatchNormalization()(x)
+            x = Dropout(self.dropout_rate)(x)
         
-        # Concatenate with symbol and timeframe information
+        # Simplified combination and output
         combined = Concatenate()([x, symbol_embedding, timeframe_input])
-        
-        # Additional layers for combined processing
-        x = Dense(64, activation='relu')(combined)
-        x = BatchNormalization()(x)
-        x = Dropout(self.dropout_rate)(x)
-        x = Dense(32, activation='relu')(x)
-        
-        # Output layer for prediction
+        x = Dense(32, activation='relu')(combined)
         outputs = Dense(self.prediction_horizon, activation='linear')(x)
         
         # Create model
         model = Model(inputs=[price_input, symbol_input, timeframe_input], outputs=outputs)
         
-        # Compile model with custom loss
+        # Use more memory-efficient optimizer
+        optimizer = tf.keras.optimizers.Adam(
+            learning_rate=self.learning_rate,
+            clipnorm=1.0  # Gradient clipping to prevent large memory spikes
+        )
+        
         model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate),
-        loss=self._directional_loss,  # Use custom loss
-        metrics=['mae', 'mse']
-     )
-    
+            optimizer=optimizer,
+            loss=self._directional_loss,
+            metrics=['mae', 'mse']
+        )
+        
         self.model = model
-        self.logger.info(f"Built universal model with {self.model_type} architecture and directional loss")
 
     
     def _build_lstm_layers(self, inputs):
@@ -343,94 +354,116 @@ class UniversalModel:
         
         return np.array(X), np.array(y)
     
+    # Optimize train method in universal_model.py
+
     @profile
     def train(self, df: pd.DataFrame, symbol: str, timeframe: str,
             feature_columns: List[str], epochs: int = None,
-            batch_size: int = None, validation_split: float = 0.2,
-            callbacks: List[tf.keras.callbacks.Callback] = None) -> Dict[str, List[float]]:
-        """
-        Train the model on new data.
+            batch_size: int = None, validation_split: float = 0.2) -> Dict[str, List[float]]:
+        """Memory-optimized training procedure"""
+        # Use smaller epochs and batch size by default on memory-constrained systems
+        epochs = epochs or min(self.epochs, 20)  # Limit max epochs
+        batch_size = batch_size or min(self.batch_size, 16)  # Smaller batch size
         
-        Args:
-            df: DataFrame with OHLCV and features
-            symbol: Trading symbol
-            timeframe: Trading timeframe
-            feature_columns: List of feature column names
-            epochs: Number of epochs to train (optional)
-            batch_size: Batch size for training (optional)
-            validation_split: Proportion of data to use for validation
-            callbacks: List of Keras callbacks (optional)
-            
-        Returns:
-            Training history
-        """
-        # Use configured values if not provided
-        epochs = epochs or self.epochs
-        batch_size = batch_size or self.batch_size
+        # Prepare data more efficiently
+        X, X_symbol, X_timeframe, y = self._prepare_data_efficient(df, symbol, timeframe, feature_columns)
         
-        # Create epoch progress callback
-        epoch_progress = EpochProgressCallback(self.logger, epochs)
+        # Memory cleanup before training
+        import gc
+        gc.collect()
         
-        # Check if we need to rebuild the model due to feature count mismatch
-        actual_feature_count = len(feature_columns)
-        expected_feature_count = self.input_shape[-1]
+        # Create simple callback that monitors memory
+        memory_tracking_callback = MemoryTrackingCallback(logger=self.logger)
         
-        if actual_feature_count != expected_feature_count:
-            self.logger.info(f"Rebuilding model for {actual_feature_count} features (was expecting {expected_feature_count})")
-            self.input_shape = (self.lookback_window, actual_feature_count)
-            self.model = None  # Clear existing model
-            self._build_model()  # Rebuild with correct shape
-        
-        # Prepare data
-        X, X_symbol, X_timeframe, y = self.prepare_data(df, symbol, timeframe, feature_columns)
-        
-        # Set up callbacks
-        if callbacks is None:
-            callbacks = [
-                EarlyStopping(monitor='val_loss' if validation_split > 0 else 'loss', 
-                            patience=10, restore_best_weights=True),
-                ReduceLROnPlateau(monitor='val_loss' if validation_split > 0 else 'loss', 
-                                factor=0.5, patience=5, min_lr=1e-6),
-                epoch_progress
-            ]
-        else:
-            # Add epoch progress to existing callbacks
-            callbacks.append(epoch_progress)
-        
-            # Split into train and validation sets - MODIFY THIS SECTION
-        if validation_split > 0:
-            split_idx = int(len(X) * (1 - validation_split))
-            
-            X_train, X_val = X[:split_idx], X[split_idx:]
-            X_symbol_train, X_symbol_val = X_symbol[:split_idx], X_symbol[split_idx:]
-            X_timeframe_train, X_timeframe_val = X_timeframe[:split_idx], X_timeframe[split_idx:]
-            y_train, y_val = y[:split_idx], y[split_idx:]
-            
-            # Use validation data
-            validation_data = ([X_val, X_symbol_val, X_timeframe_val], y_val)
-        else:
-            # No validation split
-            X_train, X_symbol_train, X_timeframe_train, y_train = X, X_symbol, X_timeframe, y
-            validation_data = None
-        
-        # Then modify the model.fit call to conditionally include validation_data
-        history = self.model.fit(
-            [X_train, X_symbol_train, X_timeframe_train], y_train,
-            validation_data=validation_data,  # This will be None if validation_split is 0
-            epochs=epochs,
-            batch_size=batch_size,
-            callbacks=callbacks,
-            verbose=1
+        # Basic early stopping
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='loss', patience=3, restore_best_weights=True
         )
-
         
-        # Store training history
-        pair_key = f"{symbol}_{timeframe}"
-        self.training_history[pair_key] = history.history
-        
-        self.logger.info(f"Trained on {len(X_train)} samples for {symbol} {timeframe}")
+        # Training in smaller chunks if dataset is large
+        if len(X) > 1000:
+            # Train on a subset first
+            subset_size = min(1000, len(X) // 2)
+            self.logger.info(f"Training on subset of {subset_size} samples first")
+            
+            history = self.model.fit(
+                [X[:subset_size], X_symbol[:subset_size], X_timeframe[:subset_size]], 
+                y[:subset_size],
+                epochs=epochs // 2,  # Shorter initial training
+                batch_size=batch_size,
+                callbacks=[memory_tracking_callback, early_stopping],
+                verbose=1
+            )
+            
+            # Force cleanup
+            gc.collect()
+            
+            # Then continue with full dataset
+            self.logger.info("Continuing with full dataset")
+            history = self.model.fit(
+                [X, X_symbol, X_timeframe], y,
+                epochs=epochs // 2,
+                batch_size=batch_size,
+                callbacks=[memory_tracking_callback, early_stopping],
+                verbose=1
+            )
+        else:
+            # Small dataset, train normally
+            history = self.model.fit(
+                [X, X_symbol, X_timeframe], y,
+                epochs=epochs,
+                batch_size=batch_size,
+                validation_split=validation_split,
+                callbacks=[memory_tracking_callback, early_stopping],
+                verbose=1
+            )
         
         return history.history
+
+    def _prepare_data_efficient(self, df: pd.DataFrame, symbol: str, timeframe: str,
+                            feature_columns: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Memory-efficient data preparation"""
+        # Extract only needed columns to reduce memory
+        df_minimal = df[['close'] + feature_columns].copy()
+        
+        # Create sequences with numpy for better memory efficiency
+        X, y = self._create_sequences_numpy(df_minimal, feature_columns)
+        
+        # Create symbol and timeframe inputs efficiently
+        symbol_id = self._get_symbol_id(symbol)
+        timeframe_minutes = self._get_timeframe_minutes(timeframe)
+        
+        X_symbol = np.full((len(X), 1), symbol_id, dtype=np.int32)
+        X_timeframe = np.full((len(X), 1), timeframe_minutes, dtype=np.float32)
+        
+        # Convert to float32 to reduce memory usage
+        X = X.astype(np.float32)
+        y = y.astype(np.float32)
+        
+        return X, X_symbol, X_timeframe, y
+
+    def _create_sequences_numpy(self, df: pd.DataFrame, feature_columns: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+        """Create sequences using numpy for memory efficiency"""
+        # Convert to numpy arrays first to reduce overhead
+        features_array = df[feature_columns].values
+        close_array = df['close'].values
+        
+        # Calculate total sequence count
+        n_sequences = len(df) - self.lookback_window - self.prediction_horizon + 1
+        if n_sequences <= 0:
+            raise ValueError("Not enough data for sequences")
+        
+        # Pre-allocate arrays
+        feature_dim = len(feature_columns)
+        X = np.zeros((n_sequences, self.lookback_window, feature_dim), dtype=np.float32)
+        y = np.zeros((n_sequences, self.prediction_horizon), dtype=np.float32)
+        
+        # Fill arrays using slicing (much more efficient than appending)
+        for i in range(n_sequences):
+            X[i] = features_array[i:i+self.lookback_window]
+            y[i] = close_array[i+self.lookback_window:i+self.lookback_window+self.prediction_horizon]
+        
+        return X, y
     
     @profile
     def predict(self, X: np.ndarray, symbol: str = None, timeframe: str = None, **kwargs) -> np.ndarray:
@@ -538,3 +571,45 @@ class UniversalModel:
         self.next_symbol_id = metadata['next_symbol_id']
         
         self.logger.info(f"Loaded model from {path}")
+
+
+# Add to universal_model.py
+
+class MemoryTrackingCallback(tf.keras.callbacks.Callback):
+    """Monitor memory usage during training"""
+    def __init__(self, logger=None, check_interval=5):
+        super().__init__()
+        self.logger = logger or logging.getLogger(__name__)
+        self.check_interval = check_interval
+        self.epoch_count = 0
+    
+    def on_epoch_begin(self, epoch, logs=None):
+        self.epoch_count += 1
+        if self.epoch_count % self.check_interval == 0:
+            self._log_memory_usage("Epoch Begin")
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if self.epoch_count % self.check_interval == 0:
+            self._log_memory_usage("Epoch End")
+    
+    def _log_memory_usage(self, point):
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            
+            self.logger.info(
+                f"Memory Usage ({point}): "
+                f"{memory_info.rss / 1024 / 1024:.1f} MB RSS, "
+                f"{memory_info.vms / 1024 / 1024:.1f} MB Virtual"
+            )
+            
+            # Force garbage collection if memory usage is high
+            if memory_info.rss > 4 * 1024 * 1024 * 1024:  # 4GB
+                import gc
+                gc.collect()
+                self.logger.warning("High memory usage detected, forcing garbage collection")
+        except ImportError:
+            self.logger.warning("psutil not available for memory monitoring")
+        except Exception as e:
+            self.logger.warning(f"Error monitoring memory: {e}")

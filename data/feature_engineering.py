@@ -85,55 +85,49 @@ class FeatureEngineer:
         
         return feature_categories
     
+   # Modifications to feature_engineering.py
+
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Generate feature set with comprehensive validation and error tracking."""
-        # Initialize data quality monitor with proper logging context
-        from utils.data_quality import DataQualityMonitor
-        quality_monitor = DataQualityMonitor(logger=self.logger)
+        """Memory-optimized feature generation pipeline"""
+        # Create a copy of essential columns only
+        essential_cols = ['open', 'high', 'low', 'close', 'volume']
+        result_df = df[essential_cols].copy()
         
-        # Validate input data frame and track pre-processing quality metrics
-        df = quality_monitor.check_dataframe(df, "pre_feature_engineering")
+        # Calculate indicators in batches with memory cleanup
+        indicator_batches = [
+            ['rsi', 'macd'],  # First batch of related indicators
+            ['bollinger_bands', 'atr'],  # Second batch
+            ['sma', 'ema'],  # Third batch
+            ['adx', 'ichimoku', 'vwap'],  # Fourth batch
+            ['slope_momentum']  # Fifth batch
+        ]
         
-        # Create tracking for problematic features with performance-optimized containers
-        problematic_features = set()  # Using set for O(1) membership testing and uniqueness
+        import gc
         
-        # Process configured indicators with systematic error isolation
-        for indicator_config in self.indicators_config:
-            indicator_name = indicator_config['name']
-            params = indicator_config.get('params', {})
+        for indicator_batch in indicator_batches:
+            # Process only indicators in current batch
+            for indicator_config in self.indicators_config:
+                indicator_name = indicator_config['name']
+                if indicator_name in indicator_batch:
+                    params = indicator_config.get('params', {})
+                    try:
+                        method = getattr(self, f"_generate_{indicator_name}")
+                        method(result_df, **params)  # Modify in-place
+                    except Exception as e:
+                        self.logger.error(f"Error generating {indicator_name}: {e}")
             
-            try:
-                # Apply feature generation with explicit error handling
-                method = getattr(self, f"_generate_{indicator_name}")
-                method(df, **params)  # Note: This modifies df in-place for memory efficiency
-            except AttributeError:
-                self.logger.warning(f"Indicator method not found: _generate_{indicator_name}")
-            except Exception as e:
-                self.logger.error(f"Error generating {indicator_name}: {e}", exc_info=True)
-                problematic_features.add(indicator_name)
-        
-        # Apply vectorized post-processing to ensure numeric output - more efficient than iterative approaches
-        numeric_cols = df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns
+            # Force garbage collection after each batch
+            gc.collect()
         
         # Replace infinities with NaN in a single vectorized operation
-        df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        numeric_cols = result_df.select_dtypes(include=['float32', 'float64']).columns
+        result_df[numeric_cols] = result_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
         
-        # Fill NaN values with zeros (or consider more sophisticated imputation strategies)
-        df[numeric_cols] = df[numeric_cols].fillna(0)
+        # Fill NaN values with zeros
+        result_df[numeric_cols] = result_df[numeric_cols].fillna(0)
         
-        # Flag quality issues for monitoring
-        if problematic_features:
-            self.logger.warning(f"Problems with {len(problematic_features)} features: {problematic_features}")
-            
-        # Validate output quality to detect any introduced anomalies
-        df = quality_monitor.check_dataframe(df, "post_feature_engineering")
-        
-        # Track key metrics for optimization opportunities
-        feature_count = len(df.columns) - 5  # Subtract OHLCV columns
-        self.logger.info(f"Generated {feature_count} features with {len(problematic_features)} issues")
-        
-        return df
+        return result_df
 
     def _validate_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure all columns have appropriate data types for model processing."""

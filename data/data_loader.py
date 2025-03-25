@@ -117,6 +117,28 @@ class DataLoader:
             df = df[df.index <= pd.Timestamp(end_date)]
         
         self.logger.info(f"Loaded {len(df)} rows for {symbol} {timeframe}")
+
+          # Convert float64 columns to float32
+        for col in df.select_dtypes(include=['float64']).columns:
+            df[col] = df[col].astype('float32')
+        
+        # Reduce memory usage with more efficient dtypes
+        df = self._optimize_dataframe_memory(df)
+
+        return df
+    
+    def _optimize_dataframe_memory(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Reduce memory usage by downcasting numeric types"""
+        for col in df.columns:
+            # Skip non-numeric columns
+            if pd.api.types.is_numeric_dtype(df[col]):
+                # Convert integers to the smallest possible integer type
+                if pd.api.types.is_integer_dtype(df[col]):
+                    df[col] = pd.to_numeric(df[col], downcast='integer')
+                # Convert floats to float32
+                elif pd.api.types.is_float_dtype(df[col]):
+                    df[col] = pd.to_numeric(df[col], downcast='float')
+        
         return df
     
 
