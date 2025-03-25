@@ -365,64 +365,51 @@ class UniversalModel:
     @profile
     def train(self, df: pd.DataFrame, symbol: str, timeframe: str,
             feature_columns: List[str], epochs: int = None,
-            batch_size: int = None, validation_split: float = 0.2) -> Dict[str, List[float]]:
-        """Memory-optimized training procedure"""
-        # Use smaller epochs and batch size by default on memory-constrained systems
-        epochs = epochs or min(self.epochs, 20)  # Limit max epochs
-        batch_size = batch_size or min(self.batch_size, 16)  # Smaller batch size
+            batch_size: int = None, validation_split: float = 0.2,
+            callbacks: List[Any] = None) -> Dict[str, List[float]]:
+        """
+        Train the model with memory-efficient processing.
         
-        # Prepare data more efficiently
-        X, X_symbol, X_timeframe, y = self._prepare_data_efficient(df, symbol, timeframe, feature_columns)
+        Args:
+            df: DataFrame with features
+            symbol: Trading symbol
+            timeframe: Trading timeframe
+            feature_columns: List of feature column names
+            epochs: Number of training epochs
+            batch_size: Training batch size
+            validation_split: Fraction of data to use for validation
+            callbacks: List of Keras callbacks for training (optional)
+            
+        Returns:
+            Dictionary of training history
+        """
+        # Use default values if not provided
+        epochs = epochs or self.epochs
+        batch_size = batch_size or self.batch_size
         
-        # Memory cleanup before training
-        import gc
-        gc.collect()
+        # Prepare data for training
+        X, X_symbol, X_timeframe, y = self.prepare_data(df, symbol, timeframe, feature_columns)
         
-        # Create simple callback that monitors memory
-        memory_tracking_callback = MemoryTrackingCallback(logger=self.logger)
+        # Default callbacks for memory management
+        if callbacks is None:
+            callbacks = []
         
-        # Basic early stopping
-        early_stopping = tf.keras.callbacks.EarlyStopping(
-            monitor='loss', patience=3, restore_best_weights=True
+        # Add epoch progress tracking
+        callbacks.append(EpochProgressCallback(self.logger, epochs))
+        
+        # Train model
+        history = self.model.fit(
+            [X, X_symbol, X_timeframe], y,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_split=validation_split,
+            callbacks=callbacks,
+            verbose=1
         )
         
-        # Training in smaller chunks if dataset is large
-        if len(X) > 1000:
-            # Train on a subset first
-            subset_size = min(1000, len(X) // 2)
-            self.logger.info(f"Training on subset of {subset_size} samples first")
-            
-            history = self.model.fit(
-                [X[:subset_size], X_symbol[:subset_size], X_timeframe[:subset_size]], 
-                y[:subset_size],
-                epochs=epochs // 2,  # Shorter initial training
-                batch_size=batch_size,
-                callbacks=[memory_tracking_callback, early_stopping],
-                verbose=1
-            )
-            
-            # Force cleanup
-            gc.collect()
-            
-            # Then continue with full dataset
-            self.logger.info("Continuing with full dataset")
-            history = self.model.fit(
-                [X, X_symbol, X_timeframe], y,
-                epochs=epochs // 2,
-                batch_size=batch_size,
-                callbacks=[memory_tracking_callback, early_stopping],
-                verbose=1
-            )
-        else:
-            # Small dataset, train normally
-            history = self.model.fit(
-                [X, X_symbol, X_timeframe], y,
-                epochs=epochs,
-                batch_size=batch_size,
-                validation_split=validation_split,
-                callbacks=[memory_tracking_callback, early_stopping],
-                verbose=1
-            )
+        # Store training history
+        pair_key = f"{symbol}_{timeframe}"
+        self.training_history[pair_key] = history.history
         
         return history.history
 

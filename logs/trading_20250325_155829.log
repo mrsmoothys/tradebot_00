@@ -1,0 +1,41 @@
+[2025-03-25 15:58:29] [trading] [INFO] - ================================================================================
+[2025-03-25 15:58:29] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 15:58:29] [trading] [INFO] - Started at: 2025-03-25 15:58:29
+[2025-03-25 15:58:29] [trading] [INFO] - ================================================================================
+[2025-03-25 15:58:29] [trading] [INFO] - Running model training
+[2025-03-25 15:58:29] [trading] [INFO] - Reducing batch size from 32 to 16 for memory efficiency
+[2025-03-25 15:58:29] [trading] [INFO] - Limiting indicators from 10 to 5
+[2025-03-25 15:58:29] [trading] [INFO] - Training Configuration (Memory-Optimized for M1 Mac):
+[2025-03-25 15:58:29] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 15:58:29] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-25 15:58:29] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 15:58:29] [trading] [INFO] -   Batch Size: 16
+[2025-03-25 15:58:29] [trading] [INFO] -   Epochs: 1
+[2025-03-25 15:58:29] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-25 15:58:29] [trading] [INFO] - Loading data for BTCUSDT 1h
+[2025-03-25 15:58:30] [trading] [INFO] - Dataset too large (17483 rows), sampling 85.8% for memory efficiency
+[2025-03-25 15:58:30] [trading] [INFO] - Generating features with memory optimization
+[2025-03-25 15:58:31] [trading] [INFO] - Selecting features
+[2025-03-25 15:58:49] [trading] [INFO] - Selected 15 features
+[2025-03-25 15:58:49] [trading] [INFO] - Using progressive training approach for large dataset
+[2025-03-25 15:58:49] [trading] [INFO] - Phase 1: Training on 2000 samples (13.3%)
+[2025-03-25 15:58:50] [trading] [ERROR] - Error training model for BTCUSDT 1h: Input 0 of layer "functional" is incompatible with the layer: expected shape=(None, 60, 30), found shape=(16, 60, 15)
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 970, in run_training
+    train_with_memory_efficiency(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 731, in train_with_memory_efficiency
+    initial_history = model.train(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 401, in train
+    history = self.model.fit(
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py", line 122, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/keras/src/layers/input_spec.py", line 245, in assert_input_compatibility
+    raise ValueError(
+ValueError: Input 0 of layer "functional" is incompatible with the layer: expected shape=(None, 60, 30), found shape=(16, 60, 15)
+[2025-03-25 15:58:50] [trading] [INFO] - Total training time: 0:00:20
+[2025-03-25 15:58:50] [trading] [INFO] - Total execution time: 0:00:20
+[2025-03-25 15:58:50] [trading] [INFO] - ================================================================================
+[2025-03-25 15:58:50] [trading] [INFO] - Finished at: 2025-03-25 15:58:50
+[2025-03-25 15:58:50] [trading] [INFO] - ================================================================================

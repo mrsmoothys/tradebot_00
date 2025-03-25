@@ -263,6 +263,8 @@ def train_model_optimized(config_manager, args, symbol: str, timeframe: str, dat
     """
     logger = logging.getLogger(__name__)
     
+    feature_selector = FeatureSelector(config_manager)
+
     # Memory optimization: Enforce memory-efficient training parameters
     epochs = min(getattr(args, 'epochs', None) or config_manager.get('model.epochs', 100), 20)
     batch_size = min(getattr(args, 'batch_size', None) or config_manager.get('model.batch_size', 32), 16)
@@ -708,23 +710,14 @@ def continue_training_efficiently(model_path, config_manager, symbol, timeframe,
 
 
 def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, epochs, batch_size, logger):
-    """Implement progressive training to minimize memory footprint."""
+    """Implement progressive training to minimize memory footprint without requiring callbacks."""
     import gc
+    import tensorflow as tf
     
-    # Memory monitoring callback
-    class MemoryCheckCallback(tf.keras.callbacks.Callback):
-        def on_epoch_end(self, epoch, logs=None):
-            if (epoch + 1) % 2 == 0:  # Every 2 epochs
-                gc.collect()
+    # Force garbage collection before training
+    gc.collect()
     
-    # Memory-efficient early stopping
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='loss',  # Monitor training loss only
-        patience=3,
-        restore_best_weights=True
-    )
-    
-    # Progressive training approach
+    # Progressive training approach 
     if len(df) > 3000:
         logger.info("Using progressive training approach for large dataset")
         
@@ -733,6 +726,8 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
         subset_data = df.sample(subset_size, random_state=42).copy()
         
         logger.info(f"Phase 1: Training on {subset_size} samples ({subset_size/len(df)*100:.1f}%)")
+        
+        # First training phase - without callbacks parameter
         initial_history = model.train(
             df=subset_data,
             symbol=symbol,
@@ -740,23 +735,23 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
             feature_columns=feature_columns,
             epochs=max(5, epochs // 3),  # Fewer epochs for initial training
             batch_size=batch_size,
-            validation_split=0.0,  # Skip validation to save memory
-            callbacks=[MemoryCheckCallback(), early_stopping]
+            validation_split=0.0  # Skip validation to save memory
         )
         
-        # Force cleanup
+        # Force cleanup between phases
         gc.collect()
         
         # Phase 2: Train on full dataset with lower learning rate
         logger.info(f"Phase 2: Training on full dataset ({len(df)} samples)")
         
-        # Reduce learning rate for fine-tuning
+        # Adjust learning rate through the model's attributes rather than via callbacks
         if hasattr(model.model, 'optimizer'):
             initial_lr = tf.keras.backend.get_value(model.model.optimizer.learning_rate)
             reduced_lr = initial_lr * 0.2  # 20% of original learning rate
             tf.keras.backend.set_value(model.model.optimizer.learning_rate, reduced_lr)
             logger.info(f"Reduced learning rate from {initial_lr} to {reduced_lr}")
         
+        # Second training phase - without callbacks parameter
         final_history = model.train(
             df=df,
             symbol=symbol,
@@ -764,9 +759,11 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
             feature_columns=feature_columns,
             epochs=max(5, epochs // 2),  # Fewer epochs for fine-tuning
             batch_size=batch_size,
-            validation_split=0.0,
-            callbacks=[MemoryCheckCallback(), early_stopping]
+            validation_split=0.0  # Skip validation to save memory
         )
+        
+        # Manual garbage collection after training
+        gc.collect()
         
         # Combine histories
         combined_history = {}
@@ -778,7 +775,7 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
                 
         return combined_history
     else:
-        # Standard training for smaller datasets
+        # Standard training for smaller datasets - without callbacks parameter
         return model.train(
             df=df,
             symbol=symbol,
@@ -786,8 +783,7 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
             feature_columns=feature_columns,
             epochs=epochs,
             batch_size=batch_size,
-            validation_split=0.1,  # Small validation split
-            callbacks=[MemoryCheckCallback(), early_stopping]
+            validation_split=0.1  # Small validation split
         )
     
 def prepare_data_efficiently(config_manager, symbol, timeframe, start_date, end_date, logger):

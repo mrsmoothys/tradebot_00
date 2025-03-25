@@ -1,0 +1,35 @@
+[2025-03-25 15:53:36] [trading] [INFO] - ================================================================================
+[2025-03-25 15:53:36] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 15:53:36] [trading] [INFO] - Started at: 2025-03-25 15:53:36
+[2025-03-25 15:53:36] [trading] [INFO] - ================================================================================
+[2025-03-25 15:53:36] [trading] [INFO] - Running model training
+[2025-03-25 15:53:36] [trading] [INFO] - Reducing batch size from 32 to 16 for memory efficiency
+[2025-03-25 15:53:36] [trading] [INFO] - Limiting indicators from 10 to 5
+[2025-03-25 15:53:36] [trading] [INFO] - Training Configuration (Memory-Optimized for M1 Mac):
+[2025-03-25 15:53:36] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 15:53:36] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-25 15:53:36] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 15:53:36] [trading] [INFO] -   Batch Size: 16
+[2025-03-25 15:53:36] [trading] [INFO] -   Epochs: 1
+[2025-03-25 15:53:36] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-25 15:53:36] [trading] [INFO] - Loading data for BTCUSDT 1h
+[2025-03-25 15:53:37] [trading] [INFO] - Dataset too large (17483 rows), sampling 85.8% for memory efficiency
+[2025-03-25 15:53:37] [trading] [INFO] - Generating features with memory optimization
+[2025-03-25 15:53:38] [trading] [INFO] - Selecting features
+[2025-03-25 15:53:56] [trading] [INFO] - Selected 15 features
+[2025-03-25 15:53:56] [trading] [INFO] - Using progressive training approach for large dataset
+[2025-03-25 15:53:56] [trading] [INFO] - Phase 1: Training on 2000 samples (13.3%)
+[2025-03-25 15:53:56] [trading] [ERROR] - Error training model for BTCUSDT 1h: UniversalModel.train() got an unexpected keyword argument 'callbacks'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 976, in run_training
+    train_with_memory_efficiency(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 738, in train_with_memory_efficiency
+    initial_history = model.train(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+TypeError: UniversalModel.train() got an unexpected keyword argument 'callbacks'
+[2025-03-25 15:53:56] [trading] [INFO] - Total training time: 0:00:19
+[2025-03-25 15:53:56] [trading] [INFO] - Total execution time: 0:00:19
+[2025-03-25 15:53:56] [trading] [INFO] - ================================================================================
+[2025-03-25 15:53:56] [trading] [INFO] - Finished at: 2025-03-25 15:53:56
+[2025-03-25 15:53:56] [trading] [INFO] - ================================================================================
