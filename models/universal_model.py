@@ -392,13 +392,13 @@ class UniversalModel:
     @profile
     def predict(self, X: np.ndarray, symbol: str = None, timeframe: str = None, **kwargs) -> np.ndarray:
         """
-        Generate predictions for input data.
+        Generate predictions for input data with improved type handling.
         
         Args:
             X: Input features with shape (samples, lookback_window, features)
             symbol: Trading symbol (optional if already set in the model)
             timeframe: Trading timeframe (optional if already set in the model)
-            **kwargs: Additional keyword arguments (including verbose)
+            **kwargs: Additional keyword arguments
             
         Returns:
             Predictions with shape (samples, prediction_horizon)
@@ -421,46 +421,58 @@ class UniversalModel:
         symbol_id = self._get_symbol_id(symbol)
         timeframe_minutes = self._get_timeframe_minutes(timeframe)
         
-        # Ensure X has the right shape
+        # Ensure X has the right shape and type
         if isinstance(X, pd.DataFrame):
             X = X.values
-            
+        
+        # Ensure X is a float type that TensorFlow can handle
+        if X.dtype == np.dtype('O') or X.dtype == object:
+            self.logger.warning(f"Converting X from object dtype to float32")
+            # Try to convert to float, replacing any non-convertible values with NaN
+            try:
+                X = X.astype(np.float32)
+            except ValueError:
+                # Handle case where direct conversion fails
+                X_float = np.zeros(X.shape, dtype=np.float32)
+                for i in range(X.shape[0]):
+                    for j in range(X.shape[1]):
+                        for k in range(X.shape[2]):
+                            try:
+                                X_float[i,j,k] = float(X[i,j,k])
+                            except (ValueError, TypeError):
+                                X_float[i,j,k] = 0.0  # Replace with 0 or NaN
+                X = X_float
+        else:
+            # Ensure we're using float32 for consistent input
+            X = X.astype(np.float32)
+                
         # Make sure we have a batch dimension
         if len(X.shape) == 2:  # (lookback, features)
             X = np.expand_dims(X, axis=0)  # Add batch dimension: (1, lookback, features)
         
+        # Create inputs with correct types
         X_symbol = np.full((X.shape[0], 1), symbol_id, dtype=np.int32)
         X_timeframe = np.full((X.shape[0], 1), timeframe_minutes, dtype=np.float32)
         
-        # Generate predictions - explicitly handle verbose
-        verbose = 0 if 'verbose' in kwargs else kwargs.get('verbose', 0)
-        predictions = self.model.predict([X, X_symbol, X_timeframe], verbose=verbose)
+        # Log input shapes and types for debugging
+        self.logger.debug(f"Prediction inputs - X: {X.shape} {X.dtype}, X_symbol: {X_symbol.shape} {X_symbol.dtype}, X_timeframe: {X_timeframe.shape} {X_timeframe.dtype}")
         
-        return predictions
-    
-    def _directional_loss(self, y_true, y_pred):
-        """
-        Custom loss function that rewards getting the direction right.
-        Penalizes wrong direction predictions more heavily.
+        # Check for any NaN or inf values
+        if np.isnan(X).any() or np.isinf(X).any():
+            self.logger.warning("Input contains NaN or inf values - replacing with zeros")
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         
-        Args:
-            y_true: True values
-            y_pred: Predicted values
-            
-        Returns:
-            Loss value
-        """
-        # Basic MSE loss
-        mse = tf.reduce_mean(tf.square(y_true - y_pred))
-        
-        # Direction component: +1 if same direction, -1 if opposite direction
-        direction_match = tf.sign(y_true) * tf.sign(y_pred)
-        
-        # Scale MSE based on direction match (penalize wrong direction more)
-        # 0.5x loss if direction is correct, 1.5x loss if direction is wrong
-        direction_factor = 1.0 - (direction_match * 0.5)
-        
-        return mse * direction_factor
+        # Generate predictions
+        verbose = kwargs.get('verbose', 0)
+        try:
+            predictions = self.model.predict([X, X_symbol, X_timeframe], verbose=verbose)
+            return predictions
+        except Exception as e:
+            self.logger.error(f"Error during model prediction: {e}")
+            self.logger.error(f"Input shapes: X={X.shape}, X_symbol={X_symbol.shape}, X_timeframe={X_timeframe.shape}")
+            self.logger.error(f"Input types: X={X.dtype}, X_symbol={X_symbol.dtype}, X_timeframe={X_timeframe.dtype}")
+            # Return zero predictions as fallback
+            return np.zeros((X.shape[0], self.prediction_horizon))
     
     def save(self, path: str) -> None:
         """

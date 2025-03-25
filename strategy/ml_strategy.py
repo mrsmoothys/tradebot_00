@@ -151,11 +151,31 @@ class MLStrategy(BaseStrategy):
             window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
             input_windows.append(window_data)
         
+        # Check for potential data issues before prediction
         input_windows = np.array(input_windows)
+        for i, window in enumerate(input_windows):
+            if np.isnan(window).any() or np.isinf(window).any():
+                self.logger.warning(f"Window {i} contains NaN or inf values - replacing with zeros")
+                input_windows[i] = np.nan_to_num(window, nan=0.0, posinf=0.0, neginf=0.0)
+            
+        # Log input shape and dtype for debugging
+        self.logger.info(f"Input shape: {input_windows.shape}, dtype: {input_windows.dtype}")
         
-        # Generate predictions in one batch
-        all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
+        # Try to convert to float32 if we have object dtype
+        if input_windows.dtype == np.dtype('O') or input_windows.dtype == object:
+            self.logger.warning("Converting input windows from object dtype to float32")
+            try:
+                input_windows = input_windows.astype(np.float32)
+            except ValueError:
+                self.logger.error("Failed to convert input windows to float32 - this will likely cause prediction errors")
         
+        # Generate predictions with try/except for robustness
+        try:
+            all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
+        except Exception as e:
+            self.logger.error(f"Prediction error: {e}")
+            # Return signals with zeros as fallback
+            return signals
         # Process predictions with lower threshold
         current_prices = signals['close'].iloc[self.lookback_window:].values
         

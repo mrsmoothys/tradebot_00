@@ -1,0 +1,27 @@
+[2025-03-25 07:30:24] [trading] [INFO] - ================================================================================
+[2025-03-25 07:30:24] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 07:30:24] [trading] [INFO] - Started at: 2025-03-25 07:30:24
+[2025-03-25 07:30:24] [trading] [INFO] - ================================================================================
+[2025-03-25 07:30:24] [trading] [INFO] - Running model training
+[2025-03-25 07:30:24] [trading] [INFO] - Training Configuration:
+[2025-03-25 07:30:24] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 07:30:24] [trading] [INFO] -   Timeframes: ['1']
+[2025-03-25 07:30:24] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 07:30:24] [trading] [INFO] - Training model for BTCUSDT 1
+[2025-03-25 07:30:24] [trading] [ERROR] - Error training model for BTCUSDT 1: No data files found for BTCUSDT 1
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 371, in run_training
+    df = prepare_data(config_manager, symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 84, in prepare_data
+    df = data_loader.load_data(symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/data/data_loader.py", line 50, in load_data
+    raise FileNotFoundError(f"No data files found for {symbol} {timeframe}")
+FileNotFoundError: No data files found for BTCUSDT 1
+[2025-03-25 07:30:24] [trading] [INFO] - Total training time: 0:00:00
+[2025-03-25 07:30:24] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-25 07:30:24] [trading] [INFO] - Total execution time: 0:00:00
+[2025-03-25 07:30:24] [trading] [INFO] - ================================================================================
+[2025-03-25 07:30:24] [trading] [INFO] - Finished at: 2025-03-25 07:30:24
+[2025-03-25 07:30:24] [trading] [INFO] - ================================================================================

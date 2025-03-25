@@ -50,7 +50,7 @@ model:
   dropout_rate: 0.2
   learning_rate: 0.001
   batch_size: 32
-  epochs: 100
+  epochs: 1
   # Reinforcement learning settings
   rl:
     enabled: true
