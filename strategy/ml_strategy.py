@@ -130,95 +130,110 @@ class MLStrategy(BaseStrategy):
     
     @profile
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Enhanced signal generation with improved type handling and error recovery.
-        """
+        """Generate trading signals with comprehensive error handling and type safety."""
+
+        from utils.data_quality import DataQualityMonitor
+        monitor = DataQualityMonitor(self.logger)
+        
+        # Verify input quality
+        data = monitor.check_dataframe(data, f"{self.symbol}_{self.timeframe}_signal_input")
+
+        # Initialize result DataFrame
         signals = data.copy()
         signals['signal'] = 0
         signals['prediction'] = 0.0
         signals['confidence'] = 0.0
         
-        # Process eligible data points
+        # Extract feature columns with type validation
         feature_cols = [col for col in signals.columns 
-                    if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
+                    if col not in ('open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence')]
         
-        # Lower threshold for more signals
-        threshold = 0.0005
+        # Validate data types early to prevent downstream errors
+        signals = DataTypeValidator.validate_dataframe(signals)
         
         try:
-            # Create input windows with proper type handling
+            # Prepare input windows with proper dimensionality
             input_windows = []
             for i in range(self.lookback_window, len(signals)):
+                # Extract and validate window data
                 window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
-                # Ensure numeric data type
-                window_data = window_data.astype(np.float32)
+                window_data = DataTypeValidator.ensure_numeric_array(window_data)
                 input_windows.append(window_data)
             
-            # Convert to numpy array with explicit dtype
-            input_windows = np.array(input_windows, dtype=np.float32)
-            
-            # Check for potential data issues before prediction
-            for i, window in enumerate(input_windows):
-                # Use try/except for safer NaN checking
-                try:
-                    if np.isnan(window).any() or np.isinf(window).any():
-                        self.logger.warning(f"Window {i} contains NaN or inf values - replacing with zeros")
-                        input_windows[i] = np.nan_to_num(window, nan=0.0, posinf=0.0, neginf=0.0)
-                except TypeError:
-                    # Handle non-numeric data by converting to float
-                    self.logger.warning(f"Window {i} contains non-numeric data - converting to float")
-                    numeric_window = np.zeros_like(window, dtype=np.float32)
-                    for j in range(window.shape[0]):
-                        for k in range(window.shape[1]):
-                            try:
-                                numeric_window[j, k] = float(window[j, k])
-                            except (ValueError, TypeError):
-                                numeric_window[j, k] = 0.0
-                    input_windows[i] = numeric_window
-            
-            # Log input shape and dtype for debugging
-            self.logger.info(f"Input shape: {input_windows.shape}, dtype: {input_windows.dtype}")
-            
-            # Generate predictions with error handling
-            try:
-                all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
-            except Exception as e:
-                self.logger.error(f"Prediction error: {e}")
-                # Return signals with zeros as fallback
-                return signals
+            # Convert to batch format expected by model
+            if input_windows:
+                input_batch = np.array(input_windows, dtype=np.float32)
                 
-            # Process predictions
-            current_prices = signals['close'].iloc[self.lookback_window:].values
+                # Perform sanity check on input dimensions
+                expected_feature_count = getattr(self.model, 'input_shape', (None, None, len(feature_cols)))[2]
+                actual_feature_count = input_batch.shape[2] if input_batch.shape[2:] else 0
+                
+                if expected_feature_count != actual_feature_count:
+                    self.logger.warning(
+                        f"Feature count mismatch: expected {expected_feature_count}, got {actual_feature_count}. "
+                        f"This may cause prediction errors."
+                    )
+                
+                # Generate predictions with comprehensive error handling
+                try:
+                    predictions = self.model.predict(input_batch, self.symbol, self.timeframe, verbose=0)
+                    
+                    # Process predictions into signals
+                    self._process_predictions_to_signals(signals, predictions, self.lookback_window)
+                    
+                except Exception as e:
+                    self.logger.error(f"Model prediction failed: {e}", exc_info=True)
+                    # Return baseline signals without crashing
+            else:
+                self.logger.warning("No valid input windows could be created")
+                
+        except Exception as e:
+            self.logger.error(f"Signal generation error: {e}", exc_info=True)
+
+        signals = monitor.check_dataframe(signals, f"{self.symbol}_{self.timeframe}_signals")
+
+        
+        return signals
+
+    def _process_predictions_to_signals(self, signals: pd.DataFrame, predictions: np.ndarray, 
+                                    offset: int, threshold: float = 0.0005) -> None:
+        """Process model predictions into trading signals - extracted for modularity."""
+        try:
+            # Get current prices for calculating returns
+            current_prices = signals['close'].iloc[offset:].values
             
-            for i, idx in enumerate(range(self.lookback_window, len(signals))):
+            # Process each prediction into signals with error isolation per prediction
+            for i, idx in enumerate(range(offset, len(signals))):
+                if i >= len(predictions) or i >= len(current_prices):
+                    break
+                    
                 current_idx = signals.index[idx]
                 current_price = current_prices[i]
                 
-                # Get prediction safely
-                if i < len(all_predictions):
-                    prediction = all_predictions[i][-1]
+                # Calculate predicted return with safety checks
+                try:
+                    prediction = predictions[i][-1]  # Get the last prediction (terminal value)
                     predicted_return = (prediction / current_price) - 1 if current_price != 0 else 0
                     
                     # Store prediction
                     signals.loc[current_idx, 'prediction'] = predicted_return
                     
-                    # Calculate confidence with safety checks
-                    confidence = abs(predicted_return) / (threshold + 1e-8)
+                    # Calculate confidence (with division by zero protection)
+                    confidence = abs(predicted_return) / max(threshold, 1e-8)
                     signals.loc[current_idx, 'confidence'] = confidence
                     
-                    # Generate signals with appropriate threshold
+                    # Generate signal with strength proportional to confidence
                     if predicted_return > threshold:
                         signal_strength = min(3, 1 + int(confidence))
-                        signals.loc[current_idx, 'signal'] = int(signal_strength)
+                        signals.loc[current_idx, 'signal'] = signal_strength
                     elif predicted_return < -threshold:
                         signal_strength = max(-3, -1 - int(confidence))
-                        signals.loc[current_idx, 'signal'] = int(signal_strength)
-        
+                        signals.loc[current_idx, 'signal'] = signal_strength
+                except Exception as e:
+                    self.logger.warning(f"Error processing prediction {i}: {e}")
+                    
         except Exception as e:
-            self.logger.error(f"Error in generate_signals: {e}")
-            # Return unmodified signals as fallback
-        
-        return signals
+            self.logger.error(f"Error in signal processing: {e}")
     
     def _generate_price_patterns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Generate price action pattern features."""
@@ -892,3 +907,43 @@ class MLStrategy(BaseStrategy):
         self.trades = []
         self.capital = self.initial_capital
         self.performance_metrics = {}
+
+
+class DataTypeValidator:
+    @staticmethod
+    def ensure_numeric_array(data, dtype=np.float32, fallback_value=0.0):
+        """Ensures data is a numeric numpy array with appropriate type handling."""
+        if isinstance(data, pd.DataFrame):
+            data = data.values
+            
+        try:
+            return np.asarray(data, dtype=dtype)
+        except (ValueError, TypeError):
+            # Element-wise conversion for mixed-type arrays
+            result = np.zeros(np.shape(data), dtype=dtype)
+            it = np.nditer(data, flags=['multi_index', 'refs_ok'], op_flags=['readonly'])
+            
+            for x in it:
+                idx = it.multi_index
+                try:
+                    result[idx] = dtype(x.item())
+                except (ValueError, TypeError):
+                    result[idx] = fallback_value
+                    
+            return result
+            
+    @staticmethod
+    def validate_dataframe(df, numeric_cols=None, fill_value=0.0):
+        """Validates DataFrame columns have correct types for ML processing."""
+        if numeric_cols is None:
+            numeric_cols = [col for col in df.columns 
+                          if col not in ('timestamp', 'date', 'time') and 
+                          not pd.api.types.is_datetime64_any_dtype(df[col])]
+        
+        for col in numeric_cols:
+            try:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(fill_value)
+            except Exception as e:
+                logging.warning(f"Type conversion issue with column {col}: {e}")
+                
+        return df

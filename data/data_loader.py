@@ -56,6 +56,11 @@ class DataLoader:
         # Load the data
         df = pd.read_csv(file_path)
         
+         # Add data quality monitoring
+        from utils.data_quality import DataQualityMonitor
+        monitor = DataQualityMonitor(self.logger)
+        df = monitor.check_dataframe(df, f"{symbol}_{timeframe}_raw")
+
         # Convert timestamp to datetime
         if 'timestamp' in df.columns:
             # Timestamp already exists, just convert to datetime if needed

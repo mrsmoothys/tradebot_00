@@ -9,7 +9,7 @@ from sklearn.decomposition import PCA
 from utils.profiling import profile
 from utils.progress import ProgressTracker
 import hashlib
-
+from utils.data_quality import DataQualityMonitor
 
 
 class FeatureEngineer:
@@ -87,72 +87,53 @@ class FeatureEngineer:
     
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Generate features from raw OHLCV data with caching."""
-
-
-         # Apply data type validation before feature generation
-        result_df = self._validate_data_types(df)
+        """Generate feature set with comprehensive validation and error tracking."""
+        # Initialize data quality monitor with proper logging context
+        from utils.data_quality import DataQualityMonitor
+        quality_monitor = DataQualityMonitor(logger=self.logger)
         
-        # Create cache directory if it doesn't exist
-        cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
-        os.makedirs(cache_dir, exist_ok=True)
+        # Validate input data frame and track pre-processing quality metrics
+        df = quality_monitor.check_dataframe(df, "pre_feature_engineering")
         
-        # Create a stronger cache key with data hash
-        symbol = df.get('symbol', 'unknown') if 'symbol' in df else 'unknown'
-        first_date = str(df.index[0]).replace(' ', '_').replace(':', '-')
-        last_date = str(df.index[-1]).replace(' ', '_').replace(':', '-')
-        data_hash = hash(pd.util.hash_pandas_object(df).values.tobytes())
-        cache_key = f"{symbol}_{len(df)}_{first_date}_{last_date}_{data_hash}"
+        # Create tracking for problematic features with performance-optimized containers
+        problematic_features = set()  # Using set for O(1) membership testing and uniqueness
         
-        # Define cache file path
-        cache_file = os.path.join(cache_dir, f"features_{cache_key}.pkl")
-        
-        # Check if cache exists
-        if os.path.exists(cache_file):
-            try:
-                # Attempt to load from cache
-                cached_df = pd.read_pickle(cache_file)
-                self.logger.info(f"Loaded features from cache: {cache_file}")
-                return cached_df
-            except Exception as e:
-                self.logger.warning(f"Error loading cache: {e}. Recalculating features.")
-        
-        # Create a copy with memory optimization
-        result_df = df.copy()
-        
-        # Process features with minimal allocations
+        # Process configured indicators with systematic error isolation
         for indicator_config in self.indicators_config:
             indicator_name = indicator_config['name']
             params = indicator_config.get('params', {})
             
             try:
-                # Use direct modification where possible
+                # Apply feature generation with explicit error handling
                 method = getattr(self, f"_generate_{indicator_name}")
-                method(result_df, **params)  # Modify in-place
+                method(df, **params)  # Note: This modifies df in-place for memory efficiency
             except AttributeError:
                 self.logger.warning(f"Indicator method not found: _generate_{indicator_name}")
             except Exception as e:
-                self.logger.error(f"Error generating {indicator_name}: {e}")
+                self.logger.error(f"Error generating {indicator_name}: {e}", exc_info=True)
+                problematic_features.add(indicator_name)
         
-        # Clean up numeric data efficiently
-        numeric_cols = result_df.select_dtypes(include=['float64']).columns
-        if len(numeric_cols) > 0:
-            # Replace infinities with NaN
-            result_df[numeric_cols] = result_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
-            # Downcast floats to float32 for memory efficiency
-            result_df[numeric_cols] = result_df[numeric_cols].astype('float32')
+        # Apply vectorized post-processing to ensure numeric output - more efficient than iterative approaches
+        numeric_cols = df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns
         
-        # Drop NaN values
-        result_df.dropna(inplace=True)
+        # Replace infinities with NaN in a single vectorized operation
+        df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
         
-        # Save to cache
-        try:
-            result_df.to_pickle(cache_file)
-            self.logger.info(f"Saved features to cache: {cache_file}")
-        except Exception as e:
-            self.logger.warning(f"Error saving to cache: {e}")
+        # Fill NaN values with zeros (or consider more sophisticated imputation strategies)
+        df[numeric_cols] = df[numeric_cols].fillna(0)
         
-        return result_df
+        # Flag quality issues for monitoring
+        if problematic_features:
+            self.logger.warning(f"Problems with {len(problematic_features)} features: {problematic_features}")
+            
+        # Validate output quality to detect any introduced anomalies
+        df = quality_monitor.check_dataframe(df, "post_feature_engineering")
+        
+        # Track key metrics for optimization opportunities
+        feature_count = len(df.columns) - 5  # Subtract OHLCV columns
+        self.logger.info(f"Generated {feature_count} features with {len(problematic_features)} issues")
+        
+        return df
 
     def _validate_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure all columns have appropriate data types for model processing."""

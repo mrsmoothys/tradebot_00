@@ -191,5 +191,27 @@ def main():
     
     return 0
 
+def generate_quality_report(config_manager):
+    """Generate comprehensive data quality report."""
+    from utils.data_quality import DataQualityMonitor
+    monitor = DataQualityMonitor(logging.getLogger("data_quality"))
+    
+    # Collect metrics from trading session
+    report = monitor.generate_report()
+    
+    # Save report
+    report_path = os.path.join(
+        config_manager.get('reporting.output_directory', 'reports'),
+        f"data_quality_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
+    
+    with open(report_path, 'w') as f:
+        import json
+        json.dump(report, f, indent=2, default=str)
+    
+    logging.getLogger(__name__).info(f"Data quality report generated: {report_path}")
+    
+    return report
+
 if __name__ == '__main__':
     sys.exit(main())

@@ -117,3 +117,15 @@ logging:
   level: "INFO"
   file: "tradingbot.log"
   console: true
+
+# Add to config/default_config.yaml
+data_quality:
+  enabled: true
+  monitoring_level: "full"  # Options: "minimal", "full", "extended" 
+  thresholds:
+    max_nan_percentage: 5.0  # Maximum allowable NaN percentage
+    max_inf_count: 0  # Maximum allowable infinity values
+    max_extreme_value_factor: 1000  # Factor beyond mean to flag as extreme
+  reporting:
+    auto_generate: true
+    alert_on_threshold_breach: true
