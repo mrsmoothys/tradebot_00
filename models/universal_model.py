@@ -90,6 +90,42 @@ class UniversalModel:
         
         # Training history
         self.training_history = {}
+
+
+    def _directional_loss(self, y_true, y_pred):
+        """
+        Custom loss function that emphasizes directional accuracy of predictions.
+        
+        Args:
+            y_true: True values (target prices)
+            y_pred: Predicted values
+            
+        Returns:
+            Loss value
+        """
+        import tensorflow as tf
+        
+        # Calculate percentage change for true values
+        true_change = (y_true[:, -1] - y_true[:, 0]) / y_true[:, 0]
+        
+        # Calculate percentage change for predictions
+        pred_change = (y_pred[:, -1] - y_true[:, 0]) / y_true[:, 0]
+        
+        # Direction agreement component (binary)
+        same_direction = tf.cast(tf.sign(true_change) == tf.sign(pred_change), tf.float32)
+        direction_penalty = 1.0 - same_direction
+        
+        # Magnitude error component (MSE)
+        magnitude_error = tf.square(pred_change - true_change)
+        
+        # Combined loss: weighted sum of direction penalty and magnitude error
+        # Higher weight on direction to prioritize getting the direction right
+        direction_weight = 2.0
+        magnitude_weight = 1.0
+        
+        combined_loss = direction_weight * direction_penalty + magnitude_weight * magnitude_error
+        
+        return tf.reduce_mean(combined_loss)
     
     def _build_model(self) -> None:
         """Build the universal model architecture."""
@@ -144,6 +180,7 @@ class UniversalModel:
     
         self.model = model
         self.logger.info(f"Built universal model with {self.model_type} architecture and directional loss")
+
     
     def _build_lstm_layers(self, inputs):
         """Build LSTM layers for the model."""

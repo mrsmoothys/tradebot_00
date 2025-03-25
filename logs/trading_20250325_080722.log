@@ -1,0 +1,34 @@
+[2025-03-25 08:07:22] [trading] [INFO] - ================================================================================
+[2025-03-25 08:07:22] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 08:07:22] [trading] [INFO] - Started at: 2025-03-25 08:07:22
+[2025-03-25 08:07:22] [trading] [INFO] - ================================================================================
+[2025-03-25 08:07:22] [trading] [INFO] - Running model training
+[2025-03-25 08:07:22] [trading] [INFO] - Training Configuration:
+[2025-03-25 08:07:22] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 08:07:22] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-25 08:07:22] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 08:07:22] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-25 08:32:05] [trading] [INFO] - Running validation backtest
+[2025-03-25 08:53:41] [trading] [ERROR] - Error training model for BTCUSDT 1h: ufunc 'isnan' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 385, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/backtest/backtest_engine.py", line 218, in run_backtest
+    backtest_results = strategy.backtest(df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 664, in backtest
+    signals = self.generate_signals(data)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/strategy/ml_strategy.py", line 157, in generate_signals
+    if np.isnan(window).any() or np.isinf(window).any():
+TypeError: ufunc 'isnan' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''
+[2025-03-25 08:53:41] [trading] [INFO] - Total training time: 0:46:19
+[2025-03-25 08:53:41] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-25 08:53:41] [trading] [INFO] - Total execution time: 0:46:19
+[2025-03-25 08:53:41] [trading] [INFO] - ================================================================================
+[2025-03-25 08:53:41] [trading] [INFO] - Finished at: 2025-03-25 08:53:41
+[2025-03-25 08:53:41] [trading] [INFO] - ================================================================================
