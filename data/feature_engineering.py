@@ -8,6 +8,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from utils.profiling import profile
 from utils.progress import ProgressTracker
+import hashlib
+
+
+
 class FeatureEngineer:
     """
     Implements feature generation from raw OHLCV data.
@@ -83,24 +87,17 @@ class FeatureEngineer:
     
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Generate features from raw OHLCV data with caching.
-        
-        Args:
-            df: DataFrame with OHLCV data
-                
-        Returns:
-            DataFrame with generated features
-        """
+        """Generate features from raw OHLCV data with caching."""
         # Create cache directory if it doesn't exist
         cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
         os.makedirs(cache_dir, exist_ok=True)
         
-        # Create a cache key based on data shape and first/last timestamps
+        # Create a stronger cache key with data hash
+        symbol = df.get('symbol', 'unknown') if 'symbol' in df else 'unknown'
         first_date = str(df.index[0]).replace(' ', '_').replace(':', '-')
         last_date = str(df.index[-1]).replace(' ', '_').replace(':', '-')
-        symbol = df.get('symbol', 'unknown') if 'symbol' in df else 'unknown'
-        cache_key = f"{symbol}_{len(df)}_{first_date}_{last_date}"
+        data_hash = hash(pd.util.hash_pandas_object(df).values.tobytes())
+        cache_key = f"{symbol}_{len(df)}_{first_date}_{last_date}_{data_hash}"
         
         # Define cache file path
         cache_file = os.path.join(cache_dir, f"features_{cache_key}.pkl")
@@ -115,46 +112,31 @@ class FeatureEngineer:
             except Exception as e:
                 self.logger.warning(f"Error loading cache: {e}. Recalculating features.")
         
-        # Create a copy to avoid modifying the original
+        # Create a copy with memory optimization
         result_df = df.copy()
         
-        # Categorize features to understand what we're working with
-        feature_categories = self.categorize_features(result_df)
-
-        # Create progress tracker
-        progress = ProgressTracker(
-            name=f"Feature Generation", 
-            total_steps=len(self.indicators_config),
-            log_interval=1,
-            logger=self.logger
-        )
-
-        # Generate features based on configuration
+        # Process features with minimal allocations
         for indicator_config in self.indicators_config:
             indicator_name = indicator_config['name']
             params = indicator_config.get('params', {})
             
             try:
+                # Use direct modification where possible
                 method = getattr(self, f"_generate_{indicator_name}")
-                result_df = method(result_df, **params)
-                progress.update(1, indicator_name)
+                method(result_df, **params)  # Modify in-place
             except AttributeError:
                 self.logger.warning(f"Indicator method not found: _generate_{indicator_name}")
             except Exception as e:
                 self.logger.error(f"Error generating {indicator_name}: {e}")
-
-         # Re-categorize to capture newly generated features
-        updated_categories = self.categorize_features(result_df)
         
-        # Report on feature generation
-        self.logger.info(f"Generated {len(updated_categories['numeric']) - len(feature_categories['numeric'])} new numeric features")
+        # Clean up numeric data efficiently
+        numeric_cols = result_df.select_dtypes(include=['float64']).columns
+        if len(numeric_cols) > 0:
+            # Replace infinities with NaN
+            result_df[numeric_cols] = result_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+            # Downcast floats to float32 for memory efficiency
+            result_df[numeric_cols] = result_df[numeric_cols].astype('float32')
         
-        # Drop NaN values
-        result_df.dropna(inplace=True)
-        
-        # Mark as complete
-        progress.complete()
-
         # Drop NaN values
         result_df.dropna(inplace=True)
         
@@ -235,10 +217,72 @@ class FeatureEngineer:
         return df
 
     @profile
-    def _generate_rsi(self, df: pd.DataFrame, window: int = 14) -> pd.DataFrame:
-        """Generate RSI indicator."""
-        df[f'rsi_{window}'] = ta.momentum.RSIIndicator(df['close'], window=window).rsi()
-        return df
+    def _generate_rsi(self, df: pd.DataFrame, window: int = 14) -> None:
+        """Generate RSI indicator with optimized calculation."""
+        # Get price series efficiently
+        close = df['close'].values
+        
+        # Calculate price changes
+        diff = np.zeros(len(close))
+        diff[1:] = np.diff(close)
+        
+        # Separate gains and losses
+        gain = np.where(diff > 0, diff, 0)
+        loss = np.where(diff < 0, -diff, 0)
+        
+        # Calculate averages using numba if available
+        try:
+            import numba as nb
+            
+            @nb.njit
+            def calculate_rsi(gain, loss, window):
+                avg_gain = np.zeros_like(gain)
+                avg_loss = np.zeros_like(loss)
+                
+                # First value is simple average
+                avg_gain[window] = np.mean(gain[1:window+1])
+                avg_loss[window] = np.mean(loss[1:window+1])
+                
+                # Calculate subsequent values
+                for i in range(window+1, len(gain)):
+                    avg_gain[i] = (avg_gain[i-1] * (window-1) + gain[i]) / window
+                    avg_loss[i] = (avg_loss[i-1] * (window-1) + loss[i]) / window
+                
+                # Calculate RS and RSI
+                rs = np.zeros_like(gain)
+                rsi = np.zeros_like(gain)
+                
+                for i in range(window, len(gain)):
+                    if avg_loss[i] == 0:
+                        rsi[i] = 100
+                    else:
+                        rs[i] = avg_gain[i] / avg_loss[i]
+                        rsi[i] = 100 - (100 / (1 + rs[i]))
+                
+                return rsi
+            
+            df[f'rsi_{window}'] = calculate_rsi(gain, loss, window)
+            
+        except ImportError:
+            # Fallback to vectorized numpy implementation
+            avg_gain = np.zeros_like(gain)
+            avg_loss = np.zeros_like(loss)
+            
+            # Initialize first average
+            avg_gain[window] = np.mean(gain[1:window+1])
+            avg_loss[window] = np.mean(loss[1:window+1])
+            
+            # Use vectorized operations for subsequent values
+            for i in range(window+1, len(gain)):
+                avg_gain[i] = (avg_gain[i-1] * (window-1) + gain[i]) / window
+                avg_loss[i] = (avg_loss[i-1] * (window-1) + loss[i]) / window
+            
+            # Calculate RS and RSI
+            rs = np.divide(avg_gain, avg_loss, out=np.zeros_like(avg_gain), where=avg_loss!=0)
+            rsi = np.zeros_like(rs)
+            rsi[window:] = 100 - (100 / (1 + rs[window:]))
+            
+            df[f'rsi_{window}'] = rsi
     
     @profile
     def _generate_macd(self, df: pd.DataFrame, fast: int = 12, slow: int = 26, 

@@ -1,0 +1,39 @@
+[2025-03-24 13:41:03] [trading] [INFO] - ================================================================================
+[2025-03-24 13:41:03] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-24 13:41:03] [trading] [INFO] - Started at: 2025-03-24 13:41:03
+[2025-03-24 13:41:03] [trading] [INFO] - ================================================================================
+[2025-03-24 13:41:03] [trading] [INFO] - Running model training
+[2025-03-24 13:41:03] [trading] [INFO] - Training Configuration:
+[2025-03-24 13:41:03] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-24 13:41:03] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-24 13:41:03] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-24 13:41:03] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-24 13:41:03] [trading] [ERROR] - Error training model for BTCUSDT 1h: Missing column provided to 'parse_dates': 'timestamp'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 371, in run_training
+    df = prepare_data(config_manager, symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 84, in prepare_data
+    df = data_loader.load_data(symbol, timeframe, start_date, end_date)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 24, in wrapper
+    result = func(*args, **kwargs)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/data/data_loader.py", line 52, in load_data
+    df = pd.read_csv(file_path, dtype=dtype_dict, parse_dates=parse_dates)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 1026, in read_csv
+    return _read(filepath_or_buffer, kwds)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 620, in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 1620, in __init__
+    self._engine = self._make_engine(f, self.engine)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 1898, in _make_engine
+    return mapping[engine](f, **self.options)
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/c_parser_wrapper.py", line 161, in __init__
+    self._validate_parse_dates_presence(self.names)  # type: ignore[has-type]
+  File "/Users/mrsmoothy/miniforge3/envs/trading_env/lib/python3.10/site-packages/pandas/io/parsers/base_parser.py", line 243, in _validate_parse_dates_presence
+    raise ValueError(
+ValueError: Missing column provided to 'parse_dates': 'timestamp'
+[2025-03-24 13:41:03] [trading] [INFO] - Total training time: 0:00:00
+[2025-03-24 13:41:03] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-24 13:41:03] [trading] [INFO] - Total execution time: 0:00:00
+[2025-03-24 13:41:03] [trading] [INFO] - ================================================================================
+[2025-03-24 13:41:03] [trading] [INFO] - Finished at: 2025-03-24 13:41:03
+[2025-03-24 13:41:03] [trading] [INFO] - ================================================================================

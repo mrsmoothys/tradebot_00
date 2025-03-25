@@ -375,55 +375,78 @@ class PerformanceCalculator:
         
         return metrics
     
-    def _calculate_benchmark_metrics(self, returns: List[float], 
-                                  benchmark_returns: List[float]) -> Dict[str, float]:
-        """
-        Calculate metrics comparing strategy to benchmark.
+    def calculate_performance_metrics(self, 
+                                equity_curve: np.ndarray, 
+                                initial_capital: float,
+                                data: pd.DataFrame = None) -> Dict[str, float]:
+        """Calculate performance metrics with optimized memory usage."""
+        # Convert to numpy array if not already
+        if isinstance(equity_curve, list):
+            equity_array = np.array(equity_curve, dtype=np.float64)
+        else:
+            equity_array = equity_curve
         
-        Args:
-            returns: List of strategy returns
-            benchmark_returns: List of benchmark returns
-            
-        Returns:
-            Dictionary of benchmark comparison metrics
-        """
-        metrics = {}
+        # Basic metrics
+        final_capital = float(equity_array[-1])
+        total_return = (final_capital / initial_capital - 1) * 100
         
-        # Truncate to match lengths
-        min_length = min(len(returns), len(benchmark_returns))
-        returns = returns[:min_length]
-        benchmark_returns = benchmark_returns[:min_length]
+        # Convert equity to returns efficiently
+        returns = np.diff(equity_array) / equity_array[:-1]
         
-        # Calculate alpha and beta if possible
-        if min_length > 0:
-            # Calculate beta (covariance / variance)
-            covariance = np.cov(returns, benchmark_returns)[0, 1]
-            benchmark_variance = np.var(benchmark_returns)
+        # Calculate key metrics
+        if len(returns) > 1:
+            sharpe_ratio = np.mean(returns) / np.std(returns) * np.sqrt(252) if np.std(returns) > 0 else 0
             
-            if benchmark_variance > 0:
-                beta = covariance / benchmark_variance
-            else:
-                beta = 0.0
-            
-            # Calculate alpha (Jensen's alpha)
-            alpha = np.mean(returns) - beta * np.mean(benchmark_returns)
-            
-            metrics['alpha'] = alpha
-            metrics['beta'] = beta
-            
-            # Information ratio
-            tracking_error = np.std(np.array(returns) - np.array(benchmark_returns))
-            excess_return = np.mean(returns) - np.mean(benchmark_returns)
-            
-            if tracking_error > 0:
-                metrics['information_ratio'] = excess_return / tracking_error
-            else:
-                metrics['information_ratio'] = 0.0
-            
-            # Correlation
-            metrics['correlation'] = np.corrcoef(returns, benchmark_returns)[0, 1]
-            
-            # Outperformance
-            metrics['excess_return'] = excess_return
+            # Sortino - only negative returns
+            neg_returns = returns[returns < 0]
+            sortino_ratio = np.mean(returns) / np.std(neg_returns) * np.sqrt(252) if len(neg_returns) > 0 and np.std(neg_returns) > 0 else 0
+        else:
+            sharpe_ratio = 0
+            sortino_ratio = 0
         
-        return metrics
+        # Calculate drawdown efficiently
+        peaks = np.maximum.accumulate(equity_array)
+        drawdowns = (equity_array - peaks) / peaks * 100
+        max_drawdown = float(abs(np.min(drawdowns)))
+        
+        # Trade-related metrics
+        num_trades = len(self.trades)
+        
+        if num_trades > 0:
+            # Vectorized calculations
+            profits = np.array([t.get('profit_pct', 0) for t in self.trades])
+            win_mask = profits > 0
+            
+            win_rate = np.sum(win_mask) / num_trades * 100
+            
+            # Win/loss stats
+            win_profits = profits[win_mask] if any(win_mask) else np.array([0])
+            loss_profits = profits[~win_mask] if any(~win_mask) else np.array([0])
+            
+            avg_win = float(np.mean(win_profits)) if any(win_mask) else 0
+            avg_loss = float(np.mean(loss_profits)) if any(~win_mask) else 0
+            
+            # Calculate profit factor efficiently
+            gross_profit = float(np.sum(win_profits)) if any(win_mask) else 0
+            gross_loss = float(abs(np.sum(loss_profits))) if any(~win_mask) else 0
+            
+            profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
+        else:
+            win_rate = 0
+            avg_win = 0
+            avg_loss = 0
+            profit_factor = 0
+        
+        return {
+            'initial_capital': float(initial_capital),
+            'final_capital': float(final_capital),
+            'total_return': float(total_return),
+            'num_trades': int(num_trades),
+            'win_rate': float(win_rate),
+            'profit_factor': float(profit_factor),
+            'avg_win': float(avg_win),
+            'avg_loss': float(avg_loss),
+            'max_drawdown': float(max_drawdown),
+            'sharpe_ratio': float(sharpe_ratio),
+            'sortino_ratio': float(sortino_ratio)
+        }

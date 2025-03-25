@@ -12,7 +12,7 @@ from functools import partial
 from backtest.backtest_engine import BacktestEngine
 from models.universal_model import UniversalModel
 from models.rl_model import RLModel
-
+import skopt
 class HyperparameterTuner:
     """
     Tunes hyperparameters for trading models and strategies.

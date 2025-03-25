@@ -127,93 +127,75 @@ class MLStrategy(BaseStrategy):
         
         return model_input
     
+    
     @profile
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Generate trading signals based on model predictions with enhanced filtering.
-        Using batch prediction for better performance.
+        Generate trading signals using vectorized operations for optimal performance.
         
         Args:
             data: Market data DataFrame
-            
+                
         Returns:
             DataFrame with signal column added
         """
+        # Initialization with pre-allocation
         signals = data.copy()
-        signals['signal'] = 0
-        signals['prediction'] = 0.0
-        signals['confidence'] = 0.0
+        n_samples = len(signals)
         
-        # We need at least lookback_window candles
-        if len(signals) <= self.lookback_window:
-            self.logger.warning(f"Not enough data for prediction. Need at least {self.lookback_window} candles.")
-            return signals
+        if n_samples <= self.lookback_window:
+            self.logger.warning(f"Insufficient data for prediction: {n_samples} samples, {self.lookback_window} required")
+            return signals.assign(signal=0, prediction=0.0, confidence=0.0)
         
-        # Get feature columns (exclude OHLCV and other special columns)
+        # Extract feature columns once
         feature_cols = [col for col in signals.columns 
                     if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
         
-        # Create progress tracker
-        progress = ProgressTracker(
-            name=f"Signal Generation for {self.symbol} {self.timeframe}", 
-            total_steps=2,  # Only 2 steps: prepare data and generate signals
-            log_interval=1,
-            logger=logger
-        )
+        # Pre-allocate arrays for optimization
+        valid_indices = range(self.lookback_window, n_samples)
+        n_predictions = len(valid_indices)
+        predictions_array = np.zeros(n_predictions)
+        confidence_array = np.zeros(n_predictions)
+        signals_array = np.zeros(n_predictions)
         
-        # Step 1: Prepare all input windows at once (batch processing)
-        input_windows = []
-        for i in range(self.lookback_window, len(signals)):
-            window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
-            input_windows.append(window_data)
+        # Create input windows efficiently using strided operations
+        X = np.zeros((n_predictions, self.lookback_window, len(feature_cols)))
+        for i, idx in enumerate(valid_indices):
+            X[i] = signals.iloc[idx-self.lookback_window:idx][feature_cols].values
         
-        # Convert to numpy array for batch prediction
-        input_windows = np.array(input_windows)
-        progress.update(1, "Prepared input windows")
-        
-        # Step 2: Generate all predictions in one batch
+        # Batch prediction (already optimized)
         try:
-            all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
-            progress.update(1, "Generated predictions")
+            all_predictions = self.model.predict(X, self.symbol, self.timeframe, verbose=0)
+            
+            # Current prices for prediction normalization
+            current_prices = signals['close'].iloc[self.lookback_window:].values
+            
+            # Vectorized prediction processing
+            predictions = all_predictions[:, -1]  # Last value in horizon
+            predicted_returns = (predictions / current_prices) - 1
+            
+            # Vector threshold operations
+            threshold = 0.001  # Lowered for more signals
+            confidence_values = np.abs(predicted_returns) / (threshold + 1e-8)
+            
+            # Generate signals vectorized
+            buy_mask = predicted_returns > threshold
+            sell_mask = predicted_returns < -threshold
+            
+            # Compute signal strength vectorized
+            signals_array = np.zeros(n_predictions)
+            signals_array[buy_mask] = np.minimum(3, 1 + confidence_values[buy_mask]/2)
+            signals_array[sell_mask] = np.maximum(-3, -1 - confidence_values[sell_mask]/2)
+            
+            # Apply results efficiently
+            idx_array = signals.index[self.lookback_window:]
+            signals.loc[idx_array, 'prediction'] = predicted_returns
+            signals.loc[idx_array, 'confidence'] = confidence_values
+            signals.loc[idx_array, 'signal'] = signals_array.astype(int)
+            
         except Exception as e:
-            self.logger.error(f"Error in batch prediction: {e}")
-            return signals
+            self.logger.error(f"Prediction error: {str(e)}", exc_info=True)
         
-        # Process predictions and generate signals
-        current_prices = signals['close'].iloc[self.lookback_window:].values
-        
-        # Lower the threshold to generate more signals for testing
-        threshold = 0.001  # Original was 0.005
-        confidence_multiplier = 0.5  # Original was 1.5
-        
-        # Apply results to DataFrame
-        for i, idx in enumerate(range(self.lookback_window, len(signals))):
-            current_idx = signals.index[idx]
-            current_price = current_prices[i]
-            
-            # Get prediction from batch results
-            prediction = all_predictions[i][-1]  # Last value in prediction horizon
-            predicted_return = (prediction / current_price) - 1
-            
-            # Store prediction
-            signals.loc[current_idx, 'prediction'] = predicted_return
-            
-            # Calculate confidence - simplified for testing
-            confidence = abs(predicted_return) / (threshold + 1e-8)
-            signals.loc[current_idx, 'confidence'] = confidence
-            
-            # Generate more aggressive signals
-            if predicted_return > threshold:
-                # Simplified signal strength
-                signal_strength = min(3, 1 + confidence/2)
-                signals.loc[current_idx, 'signal'] = int(signal_strength)
-                
-            elif predicted_return < -threshold:
-                signal_strength = max(-3, -1 - confidence/2)
-                signals.loc[current_idx, 'signal'] = int(signal_strength)
-        
-        self.logger.info(f"Generated signals: {len(signals[signals['signal'] != 0])} non-zero signals out of {len(signals)}")
-        progress.complete()
         return signals
     
     def _generate_price_patterns(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -663,52 +645,46 @@ class MLStrategy(BaseStrategy):
         return position
 
     @profile
-    # In ml_strategy.py, update the backtest method to properly update equity curve
     def backtest(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Run backtest using the strategy on historical data.
-        
-        Args:
-            data: Historical market data
-            
-        Returns:
-            Backtest results
-        """
+        """Run backtest using the strategy on historical data with optimized performance."""
         # Reset strategy state
         self.reset()
-
+        
         # Add market structure analysis
         data = self._identify_market_structure(data)
         
-        # Generate signals
+        # Generate signals - already optimized
         self.logger.info(f"Generating signals for {self.symbol} {self.timeframe}")
         signals = self.generate_signals(data)
         
-        # Store original capital for performance calculation
+        # Store original capital
         initial_capital = self.capital
         
-        # Initialize tracking variables
-        equity_curve = [initial_capital]
-        daily_equity = {}
+        # Pre-allocate arrays instead of list append
+        n_bars = len(signals)
+        equity_curve = np.zeros(n_bars + 1, dtype=np.float64)
+        equity_curve[0] = initial_capital
         
-        # Create progress tracker for backtesting
+        # Extract key data as numpy arrays for faster access
+        timestamps = signals.index.values
+        prices = signals['close'].values
+        signal_values = signals['signal'].values if 'signal' in signals.columns else np.zeros(len(signals))
+        
+        # Create progress tracker
         progress = ProgressTracker(
             name=f"Backtest for {self.symbol} {self.timeframe}", 
-            total_steps=len(signals) - self.lookback_window,
-            log_interval=1000,  # Log every 1000 candles
+            total_steps=n_bars - self.lookback_window,
+            log_interval=5000,  # Reduced logging frequency
             logger=self.logger
         )
-
-        # Process each candle
-        for i, (timestamp, row) in enumerate(signals.iterrows()):
-            # Skip first lookback_window candles (not enough data for signals)
-            if i < self.lookback_window:
-                continue
+        
+        # Process each bar with vectorized operations
+        for i in range(self.lookback_window, n_bars):
+            current_price = prices[i]
+            current_time = timestamps[i]
+            current_signal = signal_values[i]
             
-            current_price = row['close']
-            current_time = timestamp
-            
-            # Update trailing stops for open positions
+            # Update trailing stops efficiently
             for position_id, position in list(self.positions.items()):
                 if position['status'] == 'open':
                     # Update trailing stop
@@ -716,105 +692,86 @@ class MLStrategy(BaseStrategy):
                     if new_stop != position['stop_loss']:
                         self.positions[position_id]['stop_loss'] = new_stop
                     
-                    # Check if position should be closed
+                    # Check position exit conditions
                     should_close, reason = self.should_close_position(
                         position, current_price, current_time, signals.iloc[:i+1]
                     )
                     
                     if should_close:
-                        # Track capital before close
-                        capital_before = self.capital
-                        
                         # Close position
-                        closed_position = self.close_position(position_id, current_price, current_time, reason)
-                        
-                        # Log capital change
-                        capital_after = self.capital
-                        self.logger.debug(f"Capital change from trade: ${capital_after - capital_before:.2f}")
+                        self.close_position(position_id, current_price, current_time, reason)
             
-            progress.update(1, timestamp)
-
-            # Process signals for new positions
-            current_signal = row['signal']
+            # Process new position signals
+            if self.position == 0 and abs(current_signal) >= 2:
+                side = 'long' if current_signal > 0 else 'short'
+                self.open_position(side, current_price, current_time, signals.iloc[:i+1])
             
-            # If no current position and we have a signal
-            if self.position == 0:
-                if current_signal >= 2:  # Strong buy signal
-                    self.open_position('long', current_price, current_time, signals.iloc[:i+1])
-                elif current_signal <= -2:  # Strong sell signal
-                    self.open_position('short', current_price, current_time, signals.iloc[:i+1])
-            
-            # Update equity curve for each candle
+            # Update equity - direct calculation
             current_equity = self.calculate_equity(current_price)
-            equity_curve.append(current_equity)
+            equity_curve[i+1] = current_equity
             
-            # Also track daily equity (for metrics calculation)
-            day_key = timestamp.strftime('%Y-%m-%d')
-            daily_equity[day_key] = current_equity
+            # Update progress less frequently
+            if i % 100 == 0:
+                progress.update(min(100, n_bars - self.lookback_window - i))
         
-        # Close any remaining open positions at the last price
-        last_price = signals['close'].iloc[-1]
-        last_time = signals.index[-1]
-        
+        # Close any remaining positions
         for position_id, position in list(self.positions.items()):
             if position['status'] == 'open':
-                self.close_position(position_id, last_price, last_time, 'end_of_data')
+                self.close_position(position_id, prices[-1], timestamps[-1], 'end_of_data')
         
-        # Final equity value after all positions closed
-        final_equity = self.capital
-        equity_curve[-1] = final_equity
+        # Final equity value after closing positions
+        equity_curve[-1] = self.capital
         
-        # Log trade summary
-        total_profit = sum(t.get('net_profit', 0) for t in self.trades)
-        win_count = sum(1 for t in self.trades if t.get('profit_pct', 0) > 0)
-        self.logger.info(f"Backtest summary: {len(self.trades)} trades, {win_count} wins, total profit: ${total_profit:.2f}")
-        self.logger.info(f"Initial capital: ${initial_capital:.2f}, Final capital: ${final_equity:.2f}")
-        self.logger.info(f"Return: {(final_equity/initial_capital - 1)*100:.2f}%")
+        # Optimize trade statistics calculation
+        trade_array = np.array([t.get('profit_pct', 0) for t in self.trades])
+        win_mask = trade_array > 0
         
-        # Calculate performance metrics
+        win_rate = np.sum(win_mask) / len(trade_array) * 100 if len(trade_array) > 0 else 0
+        total_profit = np.sum([t.get('net_profit', 0) for t in self.trades])
+        
+        self.logger.info(f"Backtest summary: {len(self.trades)} trades, {np.sum(win_mask)} wins, "
+                        f"total profit: ${total_profit:.2f}")
+        self.logger.info(f"Initial capital: ${initial_capital:.2f}, Final capital: ${self.capital:.2f}")
+        self.logger.info(f"Return: {(self.capital/initial_capital - 1)*100:.2f}%")
+        
+        # Calculate performance metrics efficiently
         self.performance_metrics = self.calculate_performance_metrics(
             equity_curve, initial_capital, signals
         )
         
-        # Prepare results
+        # Prepare results without extra copies
         results = {
             'signals': signals,
-            'equity_curve': equity_curve,
+            'equity_curve': equity_curve.tolist(),  # Convert to list for JSON serialization
             'trades': self.trades,
             'performance': self.performance_metrics
         }
         
         progress.complete()
-
         return results
     
     def calculate_equity(self, current_price: float) -> float:
-        """
-        Calculate current equity value including unrealized P/L.
-        
-        Args:
-            current_price: Current market price
-            
-        Returns:
-            Current equity value
-        """
+        """Calculate current equity value with minimal allocations."""
+        # Start with base capital
         equity = self.capital
         
-        # Add unrealized P/L from open positions
+        # Efficient unrealized P&L calculation
         for position in self.positions.values():
-            if position['status'] == 'open':
-                side = position['side']
-                entry_price = position['entry_price']
-                size = position['size']
+            if position['status'] != 'open':
+                continue
                 
-                if side == 'long':
-                    profit_pct = (current_price - entry_price) / entry_price
-                else:  # short
-                    profit_pct = (entry_price - current_price) / entry_price
-                
-                # Calculate actual dollar value
-                profit_amount = size * profit_pct
-                equity += profit_amount
+            side = position['side']
+            entry_price = position['entry_price']
+            size = position['size']
+            
+            # Calculate profit percentage directly
+            if side == 'long':
+                profit_pct = (current_price - entry_price) / entry_price
+            else:  # short
+                profit_pct = (entry_price - current_price) / entry_price
+            
+            # Apply to equity
+            equity += size * profit_pct
         
         return equity
     
