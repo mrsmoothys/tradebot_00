@@ -1,0 +1,27 @@
+[2025-03-25 07:31:02] [trading] [INFO] - ================================================================================
+[2025-03-25 07:31:02] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 07:31:02] [trading] [INFO] - Started at: 2025-03-25 07:31:02
+[2025-03-25 07:31:02] [trading] [INFO] - ================================================================================
+[2025-03-25 07:31:02] [trading] [INFO] - Running model training
+[2025-03-25 07:31:02] [trading] [INFO] - Training Configuration:
+[2025-03-25 07:31:02] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 07:31:02] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-25 07:31:02] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 07:31:02] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-25 07:52:18] [trading] [ERROR] - Error training model for BTCUSDT 1h: 'UniversalModel' object has no attribute '_directional_loss'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 377, in run_training
+    model = train_model(config_manager, args, symbol, timeframe, df)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 196, in train_model
+    model = UniversalModel(config_manager)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 89, in __init__
+    self._build_model()
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 141, in _build_model
+    loss=self._directional_loss,  # Use custom loss
+AttributeError: 'UniversalModel' object has no attribute '_directional_loss'
+[2025-03-25 07:52:18] [trading] [INFO] - Total training time: 0:21:15
+[2025-03-25 07:52:18] [trading] [INFO] - Processed 1 symbols and 1 timeframes
+[2025-03-25 07:52:18] [trading] [INFO] - Total execution time: 0:21:15
+[2025-03-25 07:52:18] [trading] [INFO] - ================================================================================
+[2025-03-25 07:52:18] [trading] [INFO] - Finished at: 2025-03-25 07:52:18
+[2025-03-25 07:52:18] [trading] [INFO] - ================================================================================
