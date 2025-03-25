@@ -144,45 +144,50 @@ class UniversalModel:
     # Modify _build_model in universal_model.py
 
     def _build_model(self) -> None:
-        """Build a memory-efficient model architecture"""
-        # Determine feature count (default to 20 for PCA components)
-        feature_count = self.input_shape[-1]
+        """Build memory-efficient model architecture for M1 Mac."""
+        # Determine feature count with hard limit
+        feature_count = min(self.input_shape[-1], 30)  # Hard limit to prevent memory issues
+        self.input_shape = (self.lookback_window, feature_count)
         
-        # Use simpler architecture with fewer parameters
+        # Simplified inputs
         price_input = Input(shape=self.input_shape, name='price_input')
-        
-        # Simplified symbol embedding
         symbol_input = Input(shape=(1,), dtype='int32', name='symbol_input')
+        timeframe_input = Input(shape=(1,), name='timeframe_input')
+        
+        # Reduced complexity symbol embedding
         symbol_embedding = Embedding(input_dim=100, output_dim=4)(symbol_input)  # Reduced dimensions
         symbol_embedding = Flatten()(symbol_embedding)
         
-        # Timeframe input
-        timeframe_input = Input(shape=(1,), name='timeframe_input')
-        
-        # Reduced model complexity
+        # Memory-efficient model based on type
         if self.model_type == 'lstm':
-            x = LSTM(64, return_sequences=False)(price_input)  # Single layer, reduced units
+            # Single LSTM layer with reduced units
+            x = LSTM(64, return_sequences=False)(price_input)
+            x = BatchNormalization()(x)
+            x = Dropout(self.dropout_rate)(x)
+        elif self.model_type == 'gru':
+            # Single GRU layer (more memory efficient than LSTM)
+            x = GRU(64, return_sequences=False)(price_input)
             x = BatchNormalization()(x)
             x = Dropout(self.dropout_rate)(x)
         else:
-            # Fallback to simple architecture
+            # Fallback to simple dense architecture
             x = Flatten()(price_input)
             x = Dense(64, activation='relu')(x)
             x = BatchNormalization()(x)
             x = Dropout(self.dropout_rate)(x)
         
-        # Simplified combination and output
+        # Simple output network
         combined = Concatenate()([x, symbol_embedding, timeframe_input])
         x = Dense(32, activation='relu')(combined)
         outputs = Dense(self.prediction_horizon, activation='linear')(x)
         
-        # Create model
+        # Create model with memory-efficient optimizer
         model = Model(inputs=[price_input, symbol_input, timeframe_input], outputs=outputs)
         
-        # Use more memory-efficient optimizer
+        # Memory-efficient optimizer with gradient clipping
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=self.learning_rate,
-            clipnorm=1.0  # Gradient clipping to prevent large memory spikes
+            clipnorm=1.0  # Add gradient clipping to prevent memory spikes
         )
         
         model.compile(
@@ -192,6 +197,7 @@ class UniversalModel:
         )
         
         self.model = model
+        self.logger.info(f"Built memory-optimized {self.model_type} model for M1 Mac")
 
     
     def _build_lstm_layers(self, inputs):

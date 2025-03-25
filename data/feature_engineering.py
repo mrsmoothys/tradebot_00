@@ -89,66 +89,61 @@ class FeatureEngineer:
 
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Memory-optimized feature generation pipeline"""
-        # Create a copy of essential columns only
+        """Generate features with efficient memory utilization."""
+        # Create local reference to essential columns only
         essential_cols = ['open', 'high', 'low', 'close', 'volume']
-        result_df = df[essential_cols].copy()
+        ohlcv_df = df[essential_cols].copy()
         
-        # Calculate indicators in batches with memory cleanup
-        indicator_batches = [
-            ['rsi', 'macd'],  # First batch of related indicators
-            ['bollinger_bands', 'atr'],  # Second batch
-            ['sma', 'ema'],  # Third batch
-            ['adx', 'ichimoku', 'vwap'],  # Fourth batch
-            ['slope_momentum']  # Fifth batch
+        # Downcast datatypes for memory efficiency
+        for col in ohlcv_df.columns:
+            if ohlcv_df[col].dtype == 'float64':
+                ohlcv_df[col] = ohlcv_df[col].astype('float32')
+        
+        # Process indicators in batches to prevent memory spikes
+        grouped_indicators = [
+            # Group 1: Basic indicators (low memory impact)
+            [ind for ind in self.indicators_config if ind['name'] in ['rsi', 'sma', 'ema']],
+            # Group 2: Medium complexity indicators
+            [ind for ind in self.indicators_config if ind['name'] in ['macd', 'bollinger_bands', 'atr']],
+            # Group 3: Complex indicators (high memory impact)
+            [ind for ind in self.indicators_config if ind['name'] in ['adx', 'ichimoku', 'vwap', 'slope_momentum']]
         ]
         
-        import gc
+        # Track problematic features for reporting
+        problematic_features = set()
         
-        for indicator_batch in indicator_batches:
-            # Process only indicators in current batch
-            for indicator_config in self.indicators_config:
+        # Process each batch with memory cleanup
+        import gc
+        for batch_idx, indicator_batch in enumerate(grouped_indicators):
+            self.logger.info(f"Processing indicator batch {batch_idx+1}/{len(grouped_indicators)}")
+            
+            for indicator_config in indicator_batch:
                 indicator_name = indicator_config['name']
-                if indicator_name in indicator_batch:
-                    params = indicator_config.get('params', {})
-                    try:
-                        method = getattr(self, f"_generate_{indicator_name}")
-                        method(result_df, **params)  # Modify in-place
-                    except Exception as e:
-                        self.logger.error(f"Error generating {indicator_name}: {e}")
+                params = indicator_config.get('params', {})
+                
+                try:
+                    # Generate feature
+                    method = getattr(self, f"_generate_{indicator_name}")
+                    method(ohlcv_df, **params)  # In-place modification
+                except AttributeError:
+                    self.logger.warning(f"Indicator method not found: _generate_{indicator_name}")
+                except Exception as e:
+                    self.logger.error(f"Error generating {indicator_name}: {e}")
+                    problematic_features.add(indicator_name)
             
             # Force garbage collection after each batch
             gc.collect()
         
-        # Replace infinities with NaN in a single vectorized operation
-        numeric_cols = result_df.select_dtypes(include=['float32', 'float64']).columns
-        result_df[numeric_cols] = result_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        # Replace infinities and NaN values efficiently
+        numeric_cols = ohlcv_df.select_dtypes(include=['float32', 'float64', 'int32', 'int64']).columns
+        ohlcv_df[numeric_cols] = ohlcv_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        ohlcv_df[numeric_cols] = ohlcv_df[numeric_cols].fillna(0)
         
-        # Fill NaN values with zeros
-        result_df[numeric_cols] = result_df[numeric_cols].fillna(0)
+        # Log feature generation metrics
+        feature_count = len(ohlcv_df.columns) - len(essential_cols)
+        self.logger.info(f"Generated {feature_count} features with {len(problematic_features)} issues")
         
-        return result_df
-
-    def _validate_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Ensure all columns have appropriate data types for model processing."""
-        validated_df = df.copy()
-        
-        # Identify numeric columns
-        numeric_cols = [col for col in df.columns 
-                    if col not in ['timestamp', 'date', 'time'] and 
-                    not pd.api.types.is_datetime64_any_dtype(df[col])]
-        
-        # Convert to float32 for efficiency and ML compatibility
-        for col in numeric_cols:
-            try:
-                validated_df[col] = pd.to_numeric(validated_df[col], errors='coerce').astype('float32')
-            except Exception as e:
-                self.logger.warning(f"Could not convert column {col} to numeric: {e}")
-        
-        # Fill NaN values
-        validated_df[numeric_cols] = validated_df[numeric_cols].fillna(0)
-        
-        return validated_df
+        return ohlcv_df
 
     
     @profile

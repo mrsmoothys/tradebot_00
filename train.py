@@ -37,6 +37,39 @@ from datetime import timedelta
 from utils.profiling import print_profiling_stats
 import tensorflow as tf
 
+
+
+
+def configure_tensorflow_memory():
+    """Configure TensorFlow for optimal memory usage on M1 Mac"""
+    import tensorflow as tf
+    
+    # Enable memory growth to prevent TF from allocating all available memory
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for device in physical_devices:
+        try:
+            tf.config.experimental.set_memory_growth(device, True)
+        except:
+            pass
+    
+    # Optimize thread allocation for M1 architecture
+    tf.config.threading.set_intra_op_parallelism_threads(2)
+    tf.config.threading.set_inter_op_parallelism_threads(2)
+    
+    # Enable Metal acceleration on M1 if available
+    try:
+        tf.config.experimental.set_visible_devices([], 'GPU')
+    except:
+        pass
+    
+    # Enable mixed precision for better performance/memory usage
+    try:
+        policy = tf.keras.mixed_precision.Policy('mixed_float16')
+        tf.keras.mixed_precision.set_global_policy(policy)
+        return True
+    except:
+        return False
+    
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Train Trading Models')
@@ -391,98 +424,6 @@ def train_model_optimized(config_manager, args, symbol: str, timeframe: str, dat
     
     return model
 
-def continue_training(model_path: str, config_manager, symbol: str, timeframe: str, data: pd.DataFrame) -> Any:
-    """
-    Memory-efficient implementation for continuing training of an existing model.
-    
-    Args:
-        model_path: Path to existing model
-        config_manager: Configuration manager
-        symbol: Trading symbol
-        timeframe: Trading timeframe
-        data: New training data
-        
-    Returns:
-        Updated model
-    """
-    logger = logging.getLogger(__name__)
-    logger.info(f"Continuing training for model: {model_path}")
-    
-    # Load existing model with memory optimizations
-    try:
-        # Force garbage collection before loading model
-        import gc
-        gc.collect()
-        
-        model = UniversalModel(config_manager)
-        model.load(model_path)
-        
-        # Set symbol and timeframe attributes
-        model.symbol = symbol
-        model.timeframe = timeframe
-        
-        # Extract feature columns with memory constraints
-        feature_cols = [col for col in data.columns 
-                       if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
-        
-        # Memory optimization: Limit features if too many
-        max_features = 30
-        if len(feature_cols) > max_features:
-            logger.info(f"Memory optimization: Limiting features from {len(feature_cols)} to {max_features}")
-            feature_cols = feature_cols[:max_features]
-        
-        # Memory-efficient configuration for incremental learning
-        epochs = min(config_manager.get('model.incremental_training.epochs', 20), 10)
-        batch_size = min(config_manager.get('model.batch_size', 32), 16)
-        learning_rate = config_manager.get('model.incremental_training.learning_rate', 0.0001)
-        
-        # Use lower learning rate for fine-tuning
-        if hasattr(model.model, 'optimizer'):
-            import tensorflow as tf
-            tf.keras.backend.set_value(model.model.optimizer.learning_rate, learning_rate)
-            logger.info(f"Adjusted learning rate to {learning_rate} for continued training")
-        
-        logger.info(f"Memory-optimized continued training with {epochs} epochs, batch size {batch_size}, and {len(feature_cols)} features")
-        
-        # Memory monitoring callback
-        import tensorflow as tf
-        class MemoryCallback(tf.keras.callbacks.Callback):
-            def on_epoch_end(self, epoch, logs=None):
-                if (epoch + 1) % 2 == 0:  # Every 2 epochs
-                    gc.collect()
-        
-        # Early stopping for efficiency
-        early_stopping = tf.keras.callbacks.EarlyStopping(
-            monitor='loss',
-            patience=2,
-            restore_best_weights=True
-        )
-        
-        # Train on new data with memory optimization
-        history = model.train(
-            df=data,
-            symbol=symbol,
-            timeframe=timeframe,
-            feature_columns=feature_cols,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_split=0.0,  # Skip validation to save memory
-            callbacks=[MemoryCallback(), early_stopping]
-        )
-        
-        # Log training results
-        final_loss = history['loss'][-1] if 'loss' in history and len(history['loss']) > 0 else 'unknown'
-        logger.info(f"Continued training complete. Final loss: {final_loss}")
-        
-        # Force cleanup
-        gc.collect()
-        
-        return model
-        
-    except Exception as e:
-        logger.error(f"Error during continued training: {e}", exc_info=True)
-        raise
-
 def train_model(config_manager, args, symbol: str, timeframe: str, data: pd.DataFrame) -> Any:
     """
     Train a trading model.
@@ -619,7 +560,7 @@ def save_model(model: Any, config_manager, symbol: str, timeframe: str, args) ->
 
 def continue_training(model_path: str, config_manager, symbol: str, timeframe: str, data: pd.DataFrame) -> Any:
     """
-    Continue training an existing model with new data.
+    Memory-efficient implementation for continuing training of an existing model.
     
     Args:
         model_path: Path to existing model
@@ -634,7 +575,90 @@ def continue_training(model_path: str, config_manager, symbol: str, timeframe: s
     logger = logging.getLogger(__name__)
     logger.info(f"Continuing training for model: {model_path}")
     
-    # Load existing model
+    # Load existing model with memory optimizations
+    try:
+        # Force garbage collection before loading model
+        import gc
+        gc.collect()
+        
+        model = UniversalModel(config_manager)
+        model.load(model_path)
+        
+        # Set symbol and timeframe attributes
+        model.symbol = symbol
+        model.timeframe = timeframe
+        
+        # Extract feature columns with memory constraints
+        feature_cols = [col for col in data.columns 
+                       if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
+        
+        # Memory optimization: Limit features if too many
+        max_features = 30
+        if len(feature_cols) > max_features:
+            logger.info(f"Memory optimization: Limiting features from {len(feature_cols)} to {max_features}")
+            feature_cols = feature_cols[:max_features]
+        
+        # Memory-efficient configuration for incremental learning
+        epochs = min(config_manager.get('model.incremental_training.epochs', 20), 10)
+        batch_size = min(config_manager.get('model.batch_size', 32), 16)
+        learning_rate = config_manager.get('model.incremental_training.learning_rate', 0.0001)
+        
+        # Use lower learning rate for fine-tuning
+        if hasattr(model.model, 'optimizer'):
+            import tensorflow as tf
+            tf.keras.backend.set_value(model.model.optimizer.learning_rate, learning_rate)
+            logger.info(f"Adjusted learning rate to {learning_rate} for continued training")
+        
+        logger.info(f"Memory-optimized continued training with {epochs} epochs, batch size {batch_size}, and {len(feature_cols)} features")
+        
+        # Memory monitoring callback
+        import tensorflow as tf
+        class MemoryCallback(tf.keras.callbacks.Callback):
+            def on_epoch_end(self, epoch, logs=None):
+                if (epoch + 1) % 2 == 0:  # Every 2 epochs
+                    gc.collect()
+        
+        # Early stopping for efficiency
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='loss',
+            patience=2,
+            restore_best_weights=True
+        )
+        
+        # Train on new data with memory optimization
+        history = model.train(
+            df=data,
+            symbol=symbol,
+            timeframe=timeframe,
+            feature_columns=feature_cols,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_split=0.0,  # Skip validation to save memory
+            callbacks=[MemoryCallback(), early_stopping]
+        )
+        
+        # Log training results
+        final_loss = history['loss'][-1] if 'loss' in history and len(history['loss']) > 0 else 'unknown'
+        logger.info(f"Continued training complete. Final loss: {final_loss}")
+        
+        # Force cleanup
+        gc.collect()
+        
+        return model
+        
+    except Exception as e:
+        logger.error(f"Error during continued training: {e}", exc_info=True)
+        raise
+
+
+def continue_training_efficiently(model_path, config_manager, symbol, timeframe, data, logger):
+    """Continue training with memory-optimized approach."""
+    import gc
+    
+    # Force cleanup before loading model
+    gc.collect()
+    
+    logger.info(f"Loading model from {model_path} for continued training")
     model = UniversalModel(config_manager)
     model.load(model_path)
     
@@ -642,79 +666,231 @@ def continue_training(model_path: str, config_manager, symbol: str, timeframe: s
     model.symbol = symbol
     model.timeframe = timeframe
     
-    # Extract feature columns
+    # Extract feature columns with limit
     feature_cols = [col for col in data.columns 
                    if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
     
-    # Configure for incremental learning
-    epochs = config_manager.get('model.incremental_training.epochs', 20)
-    learning_rate = config_manager.get('model.incremental_training.learning_rate', 0.0005)
+    # Memory optimization: Limit feature count
+    max_features = 30
+    if len(feature_cols) > max_features:
+        logger.info(f"Limiting features from {len(feature_cols)} to {max_features}")
+        feature_cols = feature_cols[:max_features]
     
-    # Set the lower learning rate for fine-tuning
+    # Configure for incremental training
+    epochs = min(config_manager.get('model.incremental_training.epochs', 20), 10)
+    batch_size = min(config_manager.get('model.batch_size', 32), 16)
+    
+    # Reduce learning rate for fine-tuning
+    original_lr = model.learning_rate
+    reduced_lr = original_lr * 0.2  # 20% of original learning rate
+    
     if hasattr(model.model, 'optimizer'):
-        tf.keras.backend.set_value(model.model.optimizer.learning_rate, learning_rate)
-        logger.info(f"Adjusted learning rate to {learning_rate} for continued training")
+        import tensorflow as tf
+        tf.keras.backend.set_value(model.model.optimizer.learning_rate, reduced_lr)
+        logger.info(f"Reduced learning rate from {original_lr} to {reduced_lr} for fine-tuning")
     
-    logger.info(f"Continuing training with {epochs} epochs and learning rate {learning_rate}")
-    logger.info(f"Using {len(feature_cols)} features")
-    
-    # Train on new data
-    history = model.train(
+    # Memory-efficient continued training
+    train_with_memory_efficiency(
+        model=model,
         df=data,
         symbol=symbol,
         timeframe=timeframe,
         feature_columns=feature_cols,
         epochs=epochs,
-        batch_size=config_manager.get('model.batch_size', 32),
-        validation_split=0.2
+        batch_size=batch_size,
+        logger=logger
     )
     
-    # Log training results
-    final_loss = history['loss'][-1] if 'loss' in history and len(history['loss']) > 0 else 'unknown'
-    logger.info(f"Continued training complete. Final loss: {final_loss}")
+    # Force cleanup after training
+    gc.collect()
     
     return model
 
+
+def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, epochs, batch_size, logger):
+    """Implement progressive training to minimize memory footprint."""
+    import gc
+    
+    # Memory monitoring callback
+    class MemoryCheckCallback(tf.keras.callbacks.Callback):
+        def on_epoch_end(self, epoch, logs=None):
+            if (epoch + 1) % 2 == 0:  # Every 2 epochs
+                gc.collect()
+    
+    # Memory-efficient early stopping
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='loss',  # Monitor training loss only
+        patience=3,
+        restore_best_weights=True
+    )
+    
+    # Progressive training approach
+    if len(df) > 3000:
+        logger.info("Using progressive training approach for large dataset")
+        
+        # Phase 1: Train on small subset (30% of data)
+        subset_size = min(2000, len(df) // 3)
+        subset_data = df.sample(subset_size, random_state=42).copy()
+        
+        logger.info(f"Phase 1: Training on {subset_size} samples ({subset_size/len(df)*100:.1f}%)")
+        initial_history = model.train(
+            df=subset_data,
+            symbol=symbol,
+            timeframe=timeframe,
+            feature_columns=feature_columns,
+            epochs=max(5, epochs // 3),  # Fewer epochs for initial training
+            batch_size=batch_size,
+            validation_split=0.0,  # Skip validation to save memory
+            callbacks=[MemoryCheckCallback(), early_stopping]
+        )
+        
+        # Force cleanup
+        gc.collect()
+        
+        # Phase 2: Train on full dataset with lower learning rate
+        logger.info(f"Phase 2: Training on full dataset ({len(df)} samples)")
+        
+        # Reduce learning rate for fine-tuning
+        if hasattr(model.model, 'optimizer'):
+            initial_lr = tf.keras.backend.get_value(model.model.optimizer.learning_rate)
+            reduced_lr = initial_lr * 0.2  # 20% of original learning rate
+            tf.keras.backend.set_value(model.model.optimizer.learning_rate, reduced_lr)
+            logger.info(f"Reduced learning rate from {initial_lr} to {reduced_lr}")
+        
+        final_history = model.train(
+            df=df,
+            symbol=symbol,
+            timeframe=timeframe, 
+            feature_columns=feature_columns,
+            epochs=max(5, epochs // 2),  # Fewer epochs for fine-tuning
+            batch_size=batch_size,
+            validation_split=0.0,
+            callbacks=[MemoryCheckCallback(), early_stopping]
+        )
+        
+        # Combine histories
+        combined_history = {}
+        for key in initial_history:
+            if key in final_history:
+                combined_history[key] = initial_history[key] + final_history[key]
+            else:
+                combined_history[key] = initial_history[key]
+                
+        return combined_history
+    else:
+        # Standard training for smaller datasets
+        return model.train(
+            df=df,
+            symbol=symbol,
+            timeframe=timeframe,
+            feature_columns=feature_columns,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_split=0.1,  # Small validation split
+            callbacks=[MemoryCheckCallback(), early_stopping]
+        )
+    
+def prepare_data_efficiently(config_manager, symbol, timeframe, start_date, end_date, logger):
+    """Prepare data with memory efficiency as the priority."""
+    import gc
+    
+    # Initialize components
+    data_loader = DataLoader(config_manager)
+    feature_engineer = FeatureEngineer(config_manager)
+    feature_selector = FeatureSelector(config_manager)
+    
+    # Load data with memory optimization
+    logger.info(f"Loading data for {symbol} {timeframe}")
+    df = data_loader.load_data(symbol, timeframe, start_date, end_date)
+    
+    # Memory optimization: Sample if dataset is very large
+    if len(df) > 15000:  # Threshold for M1 Mac
+        sample_ratio = 15000 / len(df)
+        logger.info(f"Dataset too large ({len(df)} rows), sampling {sample_ratio*100:.1f}% for memory efficiency")
+        df = df.sample(frac=sample_ratio, random_state=42).copy()
+    
+    # Convert to float32 for memory efficiency
+    for col in df.select_dtypes(include=['float64']).columns:
+        df[col] = df[col].astype('float32')
+    
+    # Generate features (already optimized)
+    logger.info("Generating features with memory optimization")
+    df = feature_engineer.generate_features(df)
+    
+    # Force cleanup
+    gc.collect()
+    
+    # Feature selection with memory constraint
+    logger.info("Selecting features")
+    # Limit number of features for M1 Mac
+    max_features = 30
+    if hasattr(config_manager, 'set'):
+        original_n_features = config_manager.get('features.selection.params.n_features', 50)
+        if original_n_features > max_features:
+            logger.info(f"Limiting feature count from {original_n_features} to {max_features} for memory efficiency")
+            config_manager.set('features.selection.params.n_features', max_features)
+    
+    df, selected_features = feature_selector.select_features(df)
+    logger.info(f"Selected {len(selected_features)} features")
+    
+    # Disable PCA to save memory
+    if config_manager.get('features.pca.use_pca', False):
+        logger.info("Disabling PCA to save memory")
+        config_manager.set('features.pca.use_pca', False)
+    
+    # Final cleanup of NaN values
+    df.dropna(inplace=True)
+    
+    # Force garbage collection
+    gc.collect()
+    
+    return df
+
+
+def optimize_config_for_memory(config_manager, logger):
+    """Adjust configuration parameters for memory-constrained environment."""
+    # Reduce model complexity
+    original_epochs = config_manager.get('model.epochs', 100)
+    if original_epochs > 20:
+        logger.info(f"Reducing epochs from {original_epochs} to 20 for memory efficiency")
+        config_manager.set('model.epochs', 20)
+    
+    original_batch = config_manager.get('model.batch_size', 32)
+    if original_batch > 16:
+        logger.info(f"Reducing batch size from {original_batch} to 16 for memory efficiency")
+        config_manager.set('model.batch_size', 16)
+    
+    # Reduce feature count
+    original_indicators = config_manager.get('features.indicators', [])
+    if len(original_indicators) > 5:
+        essential_indicators = [ind for ind in original_indicators 
+                             if ind['name'] in ['rsi', 'macd', 'atr', 'sma', 'ema']]
+        if len(essential_indicators) >= 3:
+            logger.info(f"Limiting indicators from {len(original_indicators)} to {len(essential_indicators)}")
+            config_manager.set('features.indicators', essential_indicators)
+    
+    # Disable memory-intensive options
+    if config_manager.get('features.pca.use_pca', False):
+        logger.info("Disabling PCA for memory efficiency")
+        config_manager.set('features.pca.use_pca', False)
+    
+    # Use simpler model architecture if possible
+    model_type = config_manager.get('model.architecture', 'lstm')
+    if model_type == 'transformer':  # Most memory-intensive
+        logger.info("Switching from transformer to GRU for memory efficiency")
+        config_manager.set('model.architecture', 'gru')  # GRU is more memory efficient
+
+
+
 @profile
 def run_training(config_manager=None, args=None):
-    """
-    Run model training process with memory optimizations for constrained environments.
+    """Run model training with memory optimization for M1 Mac."""
+    # Configure TensorFlow for memory efficiency
+    configure_tensorflow_memory()
     
-    Args:
-        config_manager: Configuration manager instance (optional)
-        args: Command line arguments (optional)
-    """
-    # Configure TensorFlow memory usage upfront
-    import tensorflow as tf
+    # Force garbage collection at start
     import gc
-    import os
-    
-    # Configure TensorFlow for memory efficiency on M1 Mac
-    physical_devices = tf.config.list_physical_devices('GPU')
-    if physical_devices:
-        for device in physical_devices:
-            tf.config.experimental.set_memory_growth(device, True)
-    
-    # Apply mixed precision for better memory efficiency
-    try:
-        policy = tf.keras.mixed_precision.Policy('mixed_float16')
-        tf.keras.mixed_precision.set_global_policy(policy)
-    except Exception as e:
-        logging.warning(f"Mixed precision configuration failed: {e}")
-    
-    # Limit TensorFlow memory allocation
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        # Limit GPU memory growth
-        for gpu in gpus:
-            try:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            except RuntimeError as e:
-                logging.warning(f"GPU memory growth configuration failed: {e}")
-    
-    # Set TensorFlow thread limits for better performance on limited CPU
-    tf.config.threading.set_intra_op_parallelism_threads(2)
-    tf.config.threading.set_inter_op_parallelism_threads(2)
+    gc.collect()
     
     # Parse args if not provided
     if args is None:
@@ -730,20 +906,8 @@ def run_training(config_manager=None, args=None):
     # Record the start time for overall process
     total_start_time = time.time()
 
-    # Memory optimization: Reduce indicator count for M1 Mac
-    original_indicators = config_manager.get('features.indicators', [])
-    if len(original_indicators) > 5:
-        logger.info("Memory optimization: Reducing feature set for efficient training")
-        essential_indicators = [ind for ind in original_indicators 
-                             if ind['name'] in ['rsi', 'macd', 'atr', 'sma', 'ema']]
-        config_manager.set('features.indicators', essential_indicators)
-    
-    # Memory optimization: Reduce batch size and model complexity
-    original_batch_size = config_manager.get('model.batch_size', 32)
-    config_manager.set('model.batch_size', min(original_batch_size, 16))
-    
-    original_epochs = config_manager.get('model.epochs', 100)
-    config_manager.set('model.epochs', min(original_epochs, 20))
+    # Memory optimization: Reduce parameter values
+    optimize_config_for_memory(config_manager, logger)
     
     # Get symbols and timeframes to train
     symbols = [args.symbol] if args.symbol else config_manager.get('data.symbols', ['BTCUSDT'])
@@ -754,12 +918,12 @@ def run_training(config_manager=None, args=None):
     end_date = args.end_date or config_manager.get('data.end_date')
     
     # Print training configuration
-    logger.info("Training Configuration:")
+    logger.info("Training Configuration (Memory-Optimized for M1 Mac):")
     logger.info(f"  Symbols: {symbols}")
     logger.info(f"  Timeframes: {timeframes}")
     logger.info(f"  Date Range: {start_date or 'earliest'} to {end_date or 'latest'}")
-    logger.info(f"  Memory-optimized: Batch size={config_manager.get('model.batch_size', 16)}, "
-              f"Epochs={config_manager.get('model.epochs', 20)}")
+    logger.info(f"  Batch Size: {config_manager.get('model.batch_size', 16)}")
+    logger.info(f"  Epochs: {config_manager.get('model.epochs', 20)}")
     
     # Check if we're continuing training or starting fresh
     continuing_training = hasattr(args, 'continue_training') and args.continue_training and os.path.exists(args.continue_training)
@@ -773,87 +937,89 @@ def run_training(config_manager=None, args=None):
             logger.info(f"Training model for {symbol} {timeframe}")
             
             try:
-                # Explicit garbage collection before data preparation
-                gc.collect()
-                
-                # Prepare data with memory efficiency
-                logger.info("Preparing data with memory optimizations")
-                df = prepare_data_optimized(config_manager, symbol, timeframe, start_date, end_date)
-                
-                # Force garbage collection after data preparation
-                gc.collect()
+                # Prepare data efficiently
+                df = prepare_data_efficiently(config_manager, symbol, timeframe, start_date, end_date, logger)
                 
                 # Train or continue training model
                 if continuing_training:
-                    model = continue_training(args.continue_training, config_manager, symbol, timeframe, df)
+                    model = continue_training_efficiently(args.continue_training, config_manager, symbol, timeframe, df, logger)
                 else:
-                    model = train_model_optimized(config_manager, args, symbol, timeframe, df)
+                    # Create model with memory optimization
+                    model_type = config_manager.get('model.architecture', 'lstm')
+                    
+                    if model_type == 'rl':
+                        model = RLModel(config_manager)
+                        feature_count = min(df.shape[1] - 5, 30)  # Limit features for memory
+                        model.build_model(feature_count)
+                    else:
+                        model = UniversalModel(config_manager)
+                    
+                    # Extract feature columns with limit
+                    feature_cols = [col for col in df.columns 
+                                  if col not in ['open', 'high', 'low', 'close', 'volume']]
+                    
+                    # Memory optimization: Limit feature count
+                    max_features = 30
+                    if len(feature_cols) > max_features:
+                        logger.info(f"Limiting features from {len(feature_cols)} to {max_features}")
+                        feature_cols = feature_cols[:max_features]
+                    
+                    # Train with memory efficiency
+                    epochs = min(args.epochs if hasattr(args, 'epochs') and args.epochs else 
+                               config_manager.get('model.epochs', 100), 20)
+                    batch_size = min(args.batch_size if hasattr(args, 'batch_size') and args.batch_size else 
+                                   config_manager.get('model.batch_size', 32), 16)
+                    
+                    # Progressive training
+                    train_with_memory_efficiency(
+                        model=model,
+                        df=df,
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        feature_columns=feature_cols,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        logger=logger
+                    )
                 
-                # Force garbage collection after training
+                # Force cleanup
                 gc.collect()
                 
                 # Save model
                 model_path = save_model(model, config_manager, symbol, timeframe, args)
                 
-                # Run validation on subset to reduce memory pressure
-                logger.info("Running validation backtest on sample data")
+                # Run reduced validation to save memory
+                validation_size = min(len(df), 3000)
+                validation_df = df.iloc[-validation_size:].copy() if len(df) > validation_size else df
+                
+                logger.info(f"Running validation on {len(validation_df)} samples")
                 backtest_engine = BacktestEngine(config_manager)
-                
-                # Use a subset for validation
-                validation_size = min(len(df), 5000)
-                validation_df = df.iloc[-validation_size:].copy()
-                
                 results = backtest_engine.run_backtest(
                     symbols=[symbol],
                     timeframes=[timeframe],
                     model=model,
-                    start_date=None,
-                    end_date=None,
-                    data={symbol: {timeframe: validation_df}}  # Pass data directly
+                    data={symbol: {timeframe: validation_df}}
                 )
                 
-                # Check validation results
-                if symbol in results and timeframe in results[symbol]:
-                    if 'signals' in results[symbol][timeframe]:
-                        signals_df = results[symbol][timeframe]['signals']
-                        non_zero_signals = signals_df[signals_df['signal'] != 0]
-                        logger.info(f"Validation signals: {len(non_zero_signals)} non-zero signals out of {len(signals_df)} bars")
-                        logger.info(f"Signal distribution: {signals_df['signal'].value_counts().to_dict()}")
-                    else:
-                        logger.warning("No 'signals' key in results")
-                        
-                # Generate performance report on validation data
-                logger.info("Generating validation performance report")
+                # Generate performance report
+                logger.info("Generating performance report")
                 report_generator = PerformanceReport(config_manager)
-                report_name = f"{symbol}_{timeframe}_validation"
+                report_name = f"{symbol}_{timeframe}_{'continued' if continuing_training else 'initial'}_validation"
                 report = report_generator.generate_report(results, report_name=report_name)
                 
-                # Print validation metrics
-                performance_metrics = results[symbol][timeframe]['performance_metrics']
-                logger.info("Validation Performance:")
-                logger.info(f"  Total Return: {performance_metrics.get('total_return', 0):.2f}%")
-                logger.info(f"  Sharpe Ratio: {performance_metrics.get('sharpe_ratio', 0):.2f}")
-                logger.info(f"  Max Drawdown: {performance_metrics.get('max_drawdown', 0):.2f}%")
-                logger.info(f"  Win Rate: {performance_metrics.get('win_rate', 0):.2f}%")
+                logger.info(f"Model training and validation complete for {symbol} {timeframe}")
                 
-                # Force cleanup after validation
+                # Final cleanup
                 gc.collect()
                 
             except Exception as e:
                 logger.error(f"Error training model for {symbol} {timeframe}: {e}", exc_info=True)
-                # Continue with next symbol/timeframe
                 continue
 
-    # Log memory usage at completion
-    try:
-        import psutil
-        process = psutil.Process(os.getpid())
-        memory_info = process.memory_info()
-        logger.info(f"Final memory usage: {memory_info.rss / (1024 * 1024):.2f} MB")
-    except ImportError:
-        logger.info("psutil not available for memory monitoring")
+    # Final cleanup
+    gc.collect()
 
-    # After all training is done, log the total time and print profiling stats
+    # Log total time
     total_elapsed = time.time() - total_start_time
     logger.info(f"Total training time: {str(timedelta(seconds=int(total_elapsed)))}")
     
