@@ -88,6 +88,11 @@ class FeatureEngineer:
     @profile
     def generate_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Generate features from raw OHLCV data with caching."""
+
+
+         # Apply data type validation before feature generation
+        result_df = self._validate_data_types(df)
+        
         # Create cache directory if it doesn't exist
         cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
         os.makedirs(cache_dir, exist_ok=True)
@@ -148,6 +153,27 @@ class FeatureEngineer:
             self.logger.warning(f"Error saving to cache: {e}")
         
         return result_df
+
+    def _validate_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Ensure all columns have appropriate data types for model processing."""
+        validated_df = df.copy()
+        
+        # Identify numeric columns
+        numeric_cols = [col for col in df.columns 
+                    if col not in ['timestamp', 'date', 'time'] and 
+                    not pd.api.types.is_datetime64_any_dtype(df[col])]
+        
+        # Convert to float32 for efficiency and ML compatibility
+        for col in numeric_cols:
+            try:
+                validated_df[col] = pd.to_numeric(validated_df[col], errors='coerce').astype('float32')
+            except Exception as e:
+                self.logger.warning(f"Could not convert column {col} to numeric: {e}")
+        
+        # Fill NaN values
+        validated_df[numeric_cols] = validated_df[numeric_cols].fillna(0)
+        
+        return validated_df
 
     
     @profile

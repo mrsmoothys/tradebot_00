@@ -462,23 +462,21 @@ class UniversalModel:
         if isinstance(X, pd.DataFrame):
             X = X.values
         
-        # Ensure X is a float type that TensorFlow can handle
-        if X.dtype == np.dtype('O') or X.dtype == object:
-            self.logger.warning(f"Converting X from object dtype to float32")
-            # Try to convert to float, replacing any non-convertible values with NaN
-            try:
-                X = X.astype(np.float32)
-            except ValueError:
-                # Handle case where direct conversion fails
-                X_float = np.zeros(X.shape, dtype=np.float32)
-                for i in range(X.shape[0]):
-                    for j in range(X.shape[1]):
-                        for k in range(X.shape[2]):
-                            try:
-                                X_float[i,j,k] = float(X[i,j,k])
-                            except (ValueError, TypeError):
-                                X_float[i,j,k] = 0.0  # Replace with 0 or NaN
-                X = X_float
+         # More aggressive type conversion
+        try:
+            X = X.astype(np.float32)
+        except (ValueError, TypeError):
+            # Handle non-convertible arrays
+            self.logger.warning("Failed direct conversion to float32, attempting element-wise conversion")
+            X_float = np.zeros(X.shape, dtype=np.float32)
+            for i in range(X.shape[0]):
+                for j in range(X.shape[1]):
+                    for k in range(X.shape[2]):
+                        try:
+                            X_float[i,j,k] = float(X[i,j,k])
+                        except (ValueError, TypeError):
+                            X_float[i,j,k] = 0.0
+            X = X_float
         else:
             # Ensure we're using float32 for consistent input
             X = X.astype(np.float32)

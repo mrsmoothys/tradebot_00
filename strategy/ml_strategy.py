@@ -131,7 +131,7 @@ class MLStrategy(BaseStrategy):
     @profile
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Enhanced signal generation with lower thresholds and improved confidence metrics.
+        Enhanced signal generation with improved type handling and error recovery.
         """
         signals = data.copy()
         signals['signal'] = 0
@@ -142,65 +142,81 @@ class MLStrategy(BaseStrategy):
         feature_cols = [col for col in signals.columns 
                     if col not in ['open', 'high', 'low', 'close', 'volume', 'signal', 'prediction', 'confidence']]
         
-        # Lower threshold dramatically to generate more signals for testing
-        threshold = 0.0005  # Reduced from original 0.005
+        # Lower threshold for more signals
+        threshold = 0.0005
         
-        # Create input windows for batch prediction
-        input_windows = []
-        for i in range(self.lookback_window, len(signals)):
-            window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
-            input_windows.append(window_data)
-        
-        # Check for potential data issues before prediction
-        input_windows = np.array(input_windows)
-        for i, window in enumerate(input_windows):
-            if np.isnan(window).any() or np.isinf(window).any():
-                self.logger.warning(f"Window {i} contains NaN or inf values - replacing with zeros")
-                input_windows[i] = np.nan_to_num(window, nan=0.0, posinf=0.0, neginf=0.0)
-            
-        # Log input shape and dtype for debugging
-        self.logger.info(f"Input shape: {input_windows.shape}, dtype: {input_windows.dtype}")
-        
-        # Try to convert to float32 if we have object dtype
-        if input_windows.dtype == np.dtype('O') or input_windows.dtype == object:
-            self.logger.warning("Converting input windows from object dtype to float32")
-            try:
-                input_windows = input_windows.astype(np.float32)
-            except ValueError:
-                self.logger.error("Failed to convert input windows to float32 - this will likely cause prediction errors")
-        
-        # Generate predictions with try/except for robustness
         try:
-            all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
-        except Exception as e:
-            self.logger.error(f"Prediction error: {e}")
-            # Return signals with zeros as fallback
-            return signals
-        # Process predictions with lower threshold
-        current_prices = signals['close'].iloc[self.lookback_window:].values
+            # Create input windows with proper type handling
+            input_windows = []
+            for i in range(self.lookback_window, len(signals)):
+                window_data = signals.iloc[i-self.lookback_window:i][feature_cols].values
+                # Ensure numeric data type
+                window_data = window_data.astype(np.float32)
+                input_windows.append(window_data)
+            
+            # Convert to numpy array with explicit dtype
+            input_windows = np.array(input_windows, dtype=np.float32)
+            
+            # Check for potential data issues before prediction
+            for i, window in enumerate(input_windows):
+                # Use try/except for safer NaN checking
+                try:
+                    if np.isnan(window).any() or np.isinf(window).any():
+                        self.logger.warning(f"Window {i} contains NaN or inf values - replacing with zeros")
+                        input_windows[i] = np.nan_to_num(window, nan=0.0, posinf=0.0, neginf=0.0)
+                except TypeError:
+                    # Handle non-numeric data by converting to float
+                    self.logger.warning(f"Window {i} contains non-numeric data - converting to float")
+                    numeric_window = np.zeros_like(window, dtype=np.float32)
+                    for j in range(window.shape[0]):
+                        for k in range(window.shape[1]):
+                            try:
+                                numeric_window[j, k] = float(window[j, k])
+                            except (ValueError, TypeError):
+                                numeric_window[j, k] = 0.0
+                    input_windows[i] = numeric_window
+            
+            # Log input shape and dtype for debugging
+            self.logger.info(f"Input shape: {input_windows.shape}, dtype: {input_windows.dtype}")
+            
+            # Generate predictions with error handling
+            try:
+                all_predictions = self.model.predict(input_windows, self.symbol, self.timeframe, verbose=0)
+            except Exception as e:
+                self.logger.error(f"Prediction error: {e}")
+                # Return signals with zeros as fallback
+                return signals
+                
+            # Process predictions
+            current_prices = signals['close'].iloc[self.lookback_window:].values
+            
+            for i, idx in enumerate(range(self.lookback_window, len(signals))):
+                current_idx = signals.index[idx]
+                current_price = current_prices[i]
+                
+                # Get prediction safely
+                if i < len(all_predictions):
+                    prediction = all_predictions[i][-1]
+                    predicted_return = (prediction / current_price) - 1 if current_price != 0 else 0
+                    
+                    # Store prediction
+                    signals.loc[current_idx, 'prediction'] = predicted_return
+                    
+                    # Calculate confidence with safety checks
+                    confidence = abs(predicted_return) / (threshold + 1e-8)
+                    signals.loc[current_idx, 'confidence'] = confidence
+                    
+                    # Generate signals with appropriate threshold
+                    if predicted_return > threshold:
+                        signal_strength = min(3, 1 + int(confidence))
+                        signals.loc[current_idx, 'signal'] = int(signal_strength)
+                    elif predicted_return < -threshold:
+                        signal_strength = max(-3, -1 - int(confidence))
+                        signals.loc[current_idx, 'signal'] = int(signal_strength)
         
-        for i, idx in enumerate(range(self.lookback_window, len(signals))):
-            current_idx = signals.index[idx]
-            current_price = current_prices[i]
-            
-            # Get prediction from batch results
-            prediction = all_predictions[i][-1]
-            predicted_return = (prediction / current_price) - 1
-            
-            # Store prediction
-            signals.loc[current_idx, 'prediction'] = predicted_return
-            
-            # Calculate confidence - simplified
-            confidence = abs(predicted_return) / (threshold + 1e-8)
-            signals.loc[current_idx, 'confidence'] = confidence
-            
-            # Generate more signals with lower threshold
-            if predicted_return > threshold:
-                signal_strength = min(3, 1 + int(confidence))
-                signals.loc[current_idx, 'signal'] = int(signal_strength)
-            elif predicted_return < -threshold:
-                signal_strength = max(-3, -1 - int(confidence))
-                signals.loc[current_idx, 'signal'] = int(signal_strength)
+        except Exception as e:
+            self.logger.error(f"Error in generate_signals: {e}")
+            # Return unmodified signals as fallback
         
         return signals
     
