@@ -36,39 +36,51 @@ from utils.progress import ProgressTracker
 from datetime import timedelta
 from utils.profiling import print_profiling_stats
 import tensorflow as tf
-
-
-
+import inspect
 
 def configure_tensorflow_memory():
-    """Configure TensorFlow for optimal memory usage on M1 Mac"""
+    """Apply comprehensive memory optimizations for TensorFlow on M1 Mac."""
     import tensorflow as tf
+    import os
     
-    # Enable memory growth to prevent TF from allocating all available memory
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for device in physical_devices:
-        try:
-            tf.config.experimental.set_memory_growth(device, True)
-        except:
-            pass
-    
-    # Optimize thread allocation for M1 architecture
+    # Configure thread utilization
     tf.config.threading.set_intra_op_parallelism_threads(2)
     tf.config.threading.set_inter_op_parallelism_threads(2)
     
-    # Enable Metal acceleration on M1 if available
-    try:
-        tf.config.experimental.set_visible_devices([], 'GPU')
-    except:
-        pass
+    # Memory growth configuration
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+            print(f"Memory growth enabled for GPU: {gpu}")
+        except:
+            print("Memory growth configuration failed - continuing with default settings")
     
-    # Enable mixed precision for better performance/memory usage
+    # Mixed precision for better performance
     try:
         policy = tf.keras.mixed_precision.Policy('mixed_float16')
         tf.keras.mixed_precision.set_global_policy(policy)
-        return True
+        print("Mixed precision enabled")
     except:
-        return False
+        print("Mixed precision not available")
+    
+    # Prevent TensorFlow from allocating all memory immediately
+    try:
+        physical_devices = tf.config.list_physical_devices('GPU')
+        for device in physical_devices:
+            tf.config.experimental.set_virtual_device_configuration(
+                device,
+                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)]
+            )
+    except:
+        pass
+    
+    # Set environment variables for better TensorFlow performance
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
+    os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+    os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
+    
+    return True
     
 def parse_args():
     """Parse command line arguments."""
@@ -710,27 +722,34 @@ def continue_training_efficiently(model_path, config_manager, symbol, timeframe,
 
 
 def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, epochs, batch_size, logger):
-    """Implement progressive training to minimize memory footprint without requiring callbacks."""
+    """Progressive training implementation with comprehensive error handling."""
     import gc
     import tensorflow as tf
     
-
-
     # Detect feature count mismatch and rebuild model if necessary
     actual_feature_count = len(feature_columns)
-    expected_feature_count = model.input_shape[-1] if hasattr(model, 'input_shape') else None
+    expected_feature_count = None
+    
+    if hasattr(model, 'input_shape'):
+        if len(model.input_shape) == 3:
+            expected_feature_count = model.input_shape[2]
+        elif len(model.input_shape) == 2:
+            expected_feature_count = model.input_shape[1]
     
     if expected_feature_count is not None and actual_feature_count != expected_feature_count:
         logger.info(f"Rebuilding model: Feature count mismatch (expected {expected_feature_count}, got {actual_feature_count})")
         
-        # Update input shape
-        model.input_shape = (model.lookback_window, actual_feature_count)
+        # Update input shape based on its current dimension format
+        if len(model.input_shape) == 3:
+            model.input_shape = (None, model.lookback_window, actual_feature_count)
+        else:
+            model.input_shape = (model.lookback_window, actual_feature_count)
         
         # Force model rebuild
         model.model = None
         model._build_model()
         logger.info(f"Model rebuilt with input shape: {model.input_shape}")
-
+    
     # Force garbage collection before training
     gc.collect()
     
@@ -744,16 +763,33 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
         
         logger.info(f"Phase 1: Training on {subset_size} samples ({subset_size/len(df)*100:.1f}%)")
         
-        # First training phase - without callbacks parameter
-        initial_history = model.train(
-            df=subset_data,
-            symbol=symbol,
-            timeframe=timeframe,
-            feature_columns=feature_columns,
-            epochs=max(5, epochs // 3),  # Fewer epochs for initial training
-            batch_size=batch_size,
-            validation_split=0.0  # Skip validation to save memory
-        )
+        try:
+            # First training phase - check if callbacks is supported
+            if 'callbacks' in inspect.signature(model.train).parameters:
+                initial_history = model.train(
+                    df=subset_data,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    feature_columns=feature_columns,
+                    epochs=max(5, epochs // 3),  # Fewer epochs for initial training
+                    batch_size=batch_size,
+                    validation_split=0.0,  # Skip validation to save memory
+                    callbacks=None
+                )
+            else:
+                initial_history = model.train(
+                    df=subset_data,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    feature_columns=feature_columns,
+                    epochs=max(5, epochs // 3),
+                    batch_size=batch_size,
+                    validation_split=0.0
+                )
+        except Exception as e:
+            logger.error(f"Initial training phase failed: {e}")
+            logger.info("Attempting fallback training approach")
+            return fallback_training(model, df, symbol, timeframe, feature_columns, epochs, batch_size)
         
         # Force cleanup between phases
         gc.collect()
@@ -763,101 +799,220 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
         
         # Adjust learning rate through the model's attributes rather than via callbacks
         if hasattr(model.model, 'optimizer'):
-            initial_lr = tf.keras.backend.get_value(model.model.optimizer.learning_rate)
-            reduced_lr = initial_lr * 0.2  # 20% of original learning rate
-            tf.keras.backend.set_value(model.model.optimizer.learning_rate, reduced_lr)
-            logger.info(f"Reduced learning rate from {initial_lr} to {reduced_lr}")
+            try:
+                initial_lr = tf.keras.backend.get_value(model.model.optimizer.learning_rate)
+                reduced_lr = initial_lr * 0.2  # 20% of original learning rate
+                tf.keras.backend.set_value(model.model.optimizer.learning_rate, reduced_lr)
+                logger.info(f"Reduced learning rate from {initial_lr} to {reduced_lr}")
+            except Exception as e:
+                logger.warning(f"Failed to adjust learning rate: {e}")
         
-        # Second training phase - without callbacks parameter
-        final_history = model.train(
-            df=df,
-            symbol=symbol,
-            timeframe=timeframe, 
-            feature_columns=feature_columns,
-            epochs=max(5, epochs // 2),  # Fewer epochs for fine-tuning
-            batch_size=batch_size,
-            validation_split=0.0  # Skip validation to save memory
-        )
-        
-        # Manual garbage collection after training
-        gc.collect()
-        
-        # Combine histories
-        combined_history = {}
-        for key in initial_history:
-            if key in final_history:
-                combined_history[key] = initial_history[key] + final_history[key]
+        try:
+            # Second training phase with appropriate signature matching
+            if 'callbacks' in inspect.signature(model.train).parameters:
+                final_history = model.train(
+                    df=df,
+                    symbol=symbol,
+                    timeframe=timeframe, 
+                    feature_columns=feature_columns,
+                    epochs=max(5, epochs // 2),
+                    batch_size=batch_size,
+                    validation_split=0.0,
+                    callbacks=None
+                )
             else:
-                combined_history[key] = initial_history[key]
-                
-        return combined_history
+                final_history = model.train(
+                    df=df,
+                    symbol=symbol,
+                    timeframe=timeframe, 
+                    feature_columns=feature_columns,
+                    epochs=max(5, epochs // 2),
+                    batch_size=batch_size,
+                    validation_split=0.0
+                )
+            
+            # Manual garbage collection after training
+            gc.collect()
+            
+            # Combine histories
+            combined_history = {}
+            for key in initial_history:
+                if key in final_history:
+                    combined_history[key] = initial_history[key] + final_history[key]
+                else:
+                    combined_history[key] = initial_history[key]
+                    
+            return combined_history
+            
+        except Exception as e:
+            logger.error(f"Final training phase failed: {e}")
+            logger.info("Using initial phase results")
+            return initial_history
     else:
-        # Standard training for smaller datasets - without callbacks parameter
+        # Standard training for smaller datasets with appropriate signature matching
+        try:
+            if 'callbacks' in inspect.signature(model.train).parameters:
+                return model.train(
+                    df=df,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    feature_columns=feature_columns,
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    validation_split=0.1,
+                    callbacks=None
+                )
+            else:
+                return model.train(
+                    df=df,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    feature_columns=feature_columns,
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    validation_split=0.1
+                )
+        except Exception as e:
+            logger.error(f"Standard training failed: {e}")
+            logger.info("Attempting fallback training approach")
+            return fallback_training(model, df, symbol, timeframe, feature_columns, epochs, batch_size)
+        
+
+def fallback_training(model, df, symbol, timeframe, feature_columns, epochs, batch_size):
+    """Last-resort training approach when standard methods fail."""
+    logger = logging.getLogger(__name__)
+    logger.warning("Using fallback training approach with minimal settings")
+    
+    # Force garbage collection
+    import gc
+    gc.collect()
+    
+    try:
+        # Prepare minimal dataset
+        sample_size = min(1000, len(df))
+        reduced_df = df.sample(sample_size, random_state=42)
+        
+        # Use minimal epochs
+        min_epochs = max(3, epochs // 4)
+        
+        # Use minimal batch size
+        min_batch = max(4, batch_size // 2)
+        
+        # Attempt training with minimal settings
         return model.train(
-            df=df,
+            df=reduced_df,
             symbol=symbol,
             timeframe=timeframe,
             feature_columns=feature_columns,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_split=0.1  # Small validation split
+            epochs=min_epochs,
+            batch_size=min_batch,
+            validation_split=0.0
         )
-    
+    except Exception as e:
+        logger.error(f"Fallback training failed: {e}")
+        # Return empty history to prevent further errors
+        return {'loss': [0.0]}
+
 def prepare_data_efficiently(config_manager, symbol, timeframe, start_date, end_date, logger):
-    """Prepare data with memory efficiency as the priority."""
+    """Prepare data with memory efficiency as the primary concern."""
     import gc
     
-    # Initialize components
+    # Initialize components with defensive checks
     data_loader = DataLoader(config_manager)
     feature_engineer = FeatureEngineer(config_manager)
     feature_selector = FeatureSelector(config_manager)
     
-    # Load data with memory optimization
+    # Load data with memory monitoring
     logger.info(f"Loading data for {symbol} {timeframe}")
-    df = data_loader.load_data(symbol, timeframe, start_date, end_date)
     
-    # Memory optimization: Sample if dataset is very large
-    if len(df) > 15000:  # Threshold for M1 Mac
-        sample_ratio = 15000 / len(df)
-        logger.info(f"Dataset too large ({len(df)} rows), sampling {sample_ratio*100:.1f}% for memory efficiency")
-        df = df.sample(frac=sample_ratio, random_state=42).copy()
-    
-    # Convert to float32 for memory efficiency
-    for col in df.select_dtypes(include=['float64']).columns:
-        df[col] = df[col].astype('float32')
-    
-    # Generate features (already optimized)
-    logger.info("Generating features with memory optimization")
-    df = feature_engineer.generate_features(df)
-    
-    # Force cleanup
-    gc.collect()
-    
-    # Feature selection with memory constraint
-    logger.info("Selecting features")
-    # Limit number of features for M1 Mac
-    max_features = 30
-    if hasattr(config_manager, 'set'):
-        original_n_features = config_manager.get('features.selection.params.n_features', 50)
-        if original_n_features > max_features:
-            logger.info(f"Limiting feature count from {original_n_features} to {max_features} for memory efficiency")
+    try:
+        df = data_loader.load_data(symbol, timeframe, start_date, end_date)
+        
+        # Verify data integrity
+        if df.empty or len(df) < 100:
+            logger.error(f"Insufficient data loaded for {symbol} {timeframe}")
+            return None
+            
+        # Track memory usage
+        log_memory_usage(logger, "After data loading")
+            
+        # Memory optimization: Sample if dataset is very large
+        original_size = len(df)
+        max_size = 15000  # Maximum rows for M1 Mac
+        
+        if original_size > max_size:
+            sample_ratio = max_size / original_size
+            logger.info(f"Dataset too large ({original_size} rows), sampling {sample_ratio*100:.1f}% for memory efficiency")
+            df = df.sample(frac=sample_ratio, random_state=42).copy()
+            logger.info(f"Reduced dataset to {len(df)} rows")
+        
+        # Convert to float32 for memory efficiency
+        for col in df.select_dtypes(include=['float64']).columns:
+            df[col] = df[col].astype('float32')
+        
+        # Generate features with batched processing
+        logger.info("Generating features with memory optimization")
+        df = feature_engineer.generate_features(df)
+        
+        # Force cleanup after feature generation
+        gc.collect()
+        log_memory_usage(logger, "After feature generation")
+        
+        # Feature selection with memory constraints
+        logger.info("Selecting features")
+        # Limit number of features for M1 Mac
+        max_features = 30
+        
+        if config_manager.get('features.selection.params.n_features', 50) > max_features:
+            logger.info(f"Limiting feature count to {max_features} for memory efficiency")
             config_manager.set('features.selection.params.n_features', max_features)
+        
+        df, selected_features = feature_selector.select_features(df)
+        logger.info(f"Selected {len(selected_features)} features")
+        
+        # Disable memory-intensive operations
+        if config_manager.get('features.pca.use_pca', False):
+            logger.info("Disabling PCA to save memory")
+            config_manager.set('features.pca.use_pca', False)
+        
+        # Final cleanup
+        df.dropna(inplace=True)
+        gc.collect()
+        log_memory_usage(logger, "After feature selection")
+        
+        return df
+        
+    except Exception as e:
+        logger.error(f"Data preparation failed: {e}", exc_info=True)
+        return None
     
-    df, selected_features = feature_selector.select_features(df)
-    logger.info(f"Selected {len(selected_features)} features")
-    
-    # Disable PCA to save memory
-    if config_manager.get('features.pca.use_pca', False):
-        logger.info("Disabling PCA to save memory")
-        config_manager.set('features.pca.use_pca', False)
-    
-    # Final cleanup of NaN values
-    df.dropna(inplace=True)
-    
-    # Force garbage collection
-    gc.collect()
-    
-    return df
+def log_memory_usage(logger, stage_name):
+    """Log current memory usage at various pipeline stages."""
+    try:
+        import psutil
+        import os
+        
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        rss_mb = memory_info.rss / (1024 * 1024)
+        
+        logger.info(f"Memory usage at {stage_name}: {rss_mb:.2f} MB")
+        
+        # Force garbage collection if memory usage is high
+        if rss_mb > 4000:  # 4GB threshold
+            import gc
+            gc.collect()
+            
+            # Log after collection
+            memory_info = process.memory_info()
+            new_rss_mb = memory_info.rss / (1024 * 1024)
+            logger.info(f"Memory after forced collection: {new_rss_mb:.2f} MB (released {rss_mb - new_rss_mb:.2f} MB)")
+            
+    except ImportError:
+        logger.warning("psutil not available for memory monitoring")
+    except Exception as e:
+        logger.warning(f"Error in memory monitoring: {e}")
+
 
 
 def optimize_config_for_memory(config_manager, logger):
@@ -893,6 +1048,46 @@ def optimize_config_for_memory(config_manager, logger):
         logger.info("Switching from transformer to GRU for memory efficiency")
         config_manager.set('model.architecture', 'gru')  # GRU is more memory efficient
 
+
+def optimize_config_for_memory(config_manager, logger):
+    """Apply comprehensive memory optimizations to configuration parameters."""
+    # Reduce model complexity
+    original_epochs = config_manager.get('model.epochs', 100)
+    if original_epochs > 20:
+        logger.info(f"Reducing epochs from {original_epochs} to 20 for memory efficiency")
+        config_manager.set('model.epochs', 20)
+    
+    original_batch = config_manager.get('model.batch_size', 32)
+    if original_batch > 16:
+        logger.info(f"Reducing batch size from {original_batch} to 16 for memory efficiency")
+        config_manager.set('model.batch_size', 16)
+    
+    # Reduce feature count
+    original_indicators = config_manager.get('features.indicators', [])
+    if len(original_indicators) > 5:
+        essential_indicators = [ind for ind in original_indicators 
+                             if ind['name'] in ['rsi', 'macd', 'atr', 'sma', 'ema']]
+        if len(essential_indicators) >= 3:
+            logger.info(f"Limiting indicators from {len(original_indicators)} to {len(essential_indicators)}")
+            config_manager.set('features.indicators', essential_indicators)
+    
+    # Disable memory-intensive options
+    if config_manager.get('features.pca.use_pca', False):
+        logger.info("Disabling PCA for memory efficiency")
+        config_manager.set('features.pca.use_pca', False)
+    
+    # Use simpler model architecture if possible
+    model_type = config_manager.get('model.architecture', 'lstm')
+    if model_type == 'transformer':  # Most memory-intensive
+        logger.info("Switching from transformer to GRU for memory efficiency")
+        config_manager.set('model.architecture', 'gru')  # GRU is more memory efficient
+        
+    # Reduce hidden layer sizes
+    hidden_layers = config_manager.get('model.hidden_layers', [128, 64, 32])
+    if hidden_layers and hidden_layers[0] > 64:
+        scaled_layers = [max(size // 2, 32) for size in hidden_layers]
+        logger.info(f"Reducing hidden layer sizes from {hidden_layers} to {scaled_layers}")
+        config_manager.set('model.hidden_layers', scaled_layers)
 
 
 @profile

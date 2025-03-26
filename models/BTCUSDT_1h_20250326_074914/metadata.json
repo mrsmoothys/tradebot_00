@@ -1,0 +1,26 @@
+{
+  "lookback_window": 60,
+  "prediction_horizon": 5,
+  "hidden_layers": [
+    64,
+    32,
+    32
+  ],
+  "dropout_rate": 0.2,
+  "learning_rate": 0.001,
+  "batch_size": 16,
+  "epochs": 1,
+  "model_type": "lstm",
+  "symbol_map": {
+    "BTCUSDT": 0
+  },
+  "next_symbol_id": 1,
+  "training_history": {
+    "BTCUSDT_1h": {
+      "loss": 0.7215386033058167,
+      "mae": Infinity,
+      "mse": Infinity
+    }
+  },
+  "datetime_saved": "2025-03-26T07:49:14.867921"
+}

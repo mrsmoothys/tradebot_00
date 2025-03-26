@@ -1,0 +1,43 @@
+[2025-03-26 07:45:51] [trading] [INFO] - ================================================================================
+[2025-03-26 07:45:51] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-26 07:45:51] [trading] [INFO] - Started at: 2025-03-26 07:45:51
+[2025-03-26 07:45:51] [trading] [INFO] - ================================================================================
+[2025-03-26 07:45:51] [trading] [INFO] - Running model training
+[2025-03-26 07:45:51] [trading] [INFO] - Reducing batch size from 32 to 16 for memory efficiency
+[2025-03-26 07:45:51] [trading] [INFO] - Limiting indicators from 10 to 5
+[2025-03-26 07:45:51] [trading] [INFO] - Reducing hidden layer sizes from [128, 64, 32] to [64, 32, 32]
+[2025-03-26 07:45:51] [trading] [INFO] - Training Configuration (Memory-Optimized for M1 Mac):
+[2025-03-26 07:45:51] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-26 07:45:51] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-26 07:45:51] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-26 07:45:51] [trading] [INFO] -   Batch Size: 16
+[2025-03-26 07:45:51] [trading] [INFO] -   Epochs: 1
+[2025-03-26 07:45:51] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-26 07:45:51] [trading] [INFO] - Loading data for BTCUSDT 1h
+[2025-03-26 07:45:51] [trading] [INFO] - Memory usage at After data loading: 379.64 MB
+[2025-03-26 07:45:51] [trading] [INFO] - Dataset too large (17483 rows), sampling 85.8% for memory efficiency
+[2025-03-26 07:45:51] [trading] [INFO] - Reduced dataset to 15000 rows
+[2025-03-26 07:45:51] [trading] [INFO] - Generating features with memory optimization
+[2025-03-26 07:45:54] [trading] [INFO] - Memory usage at After feature generation: 396.39 MB
+[2025-03-26 07:45:54] [trading] [INFO] - Selecting features
+[2025-03-26 07:46:11] [trading] [INFO] - Selected 15 features
+[2025-03-26 07:46:12] [trading] [INFO] - Memory usage at After feature selection: 443.27 MB
+[2025-03-26 07:46:12] [trading] [INFO] - Rebuilding model: Feature count mismatch (expected 30, got 15)
+[2025-03-26 07:46:12] [trading] [INFO] - Model rebuilt with input shape: (None, 60, 15)
+[2025-03-26 07:46:12] [trading] [INFO] - Using progressive training approach for large dataset
+[2025-03-26 07:46:12] [trading] [INFO] - Phase 1: Training on 2000 samples (13.3%)
+[2025-03-26 07:46:19] [trading] [INFO] - Phase 2: Training on full dataset (15000 samples)
+[2025-03-26 07:46:19] [trading] [WARNING] - Failed to adjust learning rate: 'str' object has no attribute 'name'
+[2025-03-26 07:49:14] [trading] [INFO] - Running validation on 3000 samples
+[2025-03-26 07:49:14] [trading] [ERROR] - Error training model for BTCUSDT 1h: BacktestEngine.run_backtest() got an unexpected keyword argument 'data'
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 1205, in run_training
+    results = backtest_engine.run_backtest(
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/utils/profiling.py", line 25, in wrapper
+    result = func(*args, **kwargs)
+TypeError: BacktestEngine.run_backtest() got an unexpected keyword argument 'data'
+[2025-03-26 07:49:14] [trading] [INFO] - Total training time: 0:03:23
+[2025-03-26 07:49:14] [trading] [INFO] - Total execution time: 0:03:23
+[2025-03-26 07:49:14] [trading] [INFO] - ================================================================================
+[2025-03-26 07:49:14] [trading] [INFO] - Finished at: 2025-03-26 07:49:14
+[2025-03-26 07:49:14] [trading] [INFO] - ================================================================================

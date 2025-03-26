@@ -3,6 +3,7 @@ import logging
 import functools
 from typing import Callable, Dict, Any
 from collections import defaultdict
+import inspect
 
 # Global dictionary to store timing statistics
 timing_stats = defaultdict(lambda: {"count": 0, "total_time": 0.0, "min_time": float('inf'), "max_time": 0.0})
@@ -58,3 +59,31 @@ def print_profiling_stats() -> None:
         logger.info(f"  Max time: {stats['max_time']:.4f} seconds")
     
     logger.info("===========================")
+
+
+def log_memory_usage(logger, stage_name):
+    """Log current memory usage at various pipeline stages."""
+    try:
+        import psutil
+        import os
+        
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        rss_mb = memory_info.rss / (1024 * 1024)
+        
+        logger.info(f"Memory usage at {stage_name}: {rss_mb:.2f} MB")
+        
+        # Force garbage collection if memory usage is high
+        if rss_mb > 4000:  # 4GB threshold
+            import gc
+            gc.collect()
+            
+            # Log after collection
+            memory_info = process.memory_info()
+            new_rss_mb = memory_info.rss / (1024 * 1024)
+            logger.info(f"Memory after forced collection: {new_rss_mb:.2f} MB (released {rss_mb - new_rss_mb:.2f} MB)")
+            
+    except ImportError:
+        logger.warning("psutil not available for memory monitoring")
+    except Exception as e:
+        logger.warning(f"Error in memory monitoring: {e}")
