@@ -320,7 +320,7 @@ def train_model_optimized(config_manager, args, symbol: str, timeframe: str, dat
             symbols=[symbol],
             timeframes=[timeframe],
             model=model,
-            data={symbol: {timeframe: train_data}}  # Pass data directly
+            preloaded_data={symbol: {timeframe: train_data}}  # Pass data directly
         )
         
     else:
@@ -1206,7 +1206,7 @@ def run_training(config_manager=None, args=None):
                     symbols=[symbol],
                     timeframes=[timeframe],
                     model=model,
-                    data={symbol: {timeframe: validation_df}}
+                    preloaded_data={symbol: {timeframe: validation_df}}
                 )
                 
                 # Generate performance report

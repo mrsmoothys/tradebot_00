@@ -128,9 +128,15 @@ class BacktestEngine:
             raise ValueError(f"Unsupported strategy type: {strategy_type}")
     
     @profile
-    def run_backtest(self, symbols: List[str], timeframes: List[str], 
-                start_date: Optional[str] = None, end_date: Optional[str] = None,
-                model: Optional[Any] = None) -> Dict[str, Dict[str, Any]]:
+    def run_backtest(
+        self, 
+        symbols: List[str], 
+        timeframes: List[str], 
+        start_date: Optional[str] = None, 
+        end_date: Optional[str] = None,
+        model: Optional[Any] = None, 
+        preloaded_data: Optional[Dict[str, Dict[str, pd.DataFrame]]] = None
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Run backtest for multiple symbols and timeframes.
         
@@ -144,6 +150,7 @@ class BacktestEngine:
         Returns:
             Dictionary of backtest results by symbol and timeframe
         """
+        
         # Calculate total number of symbol/timeframe combinations
         total_combinations = len(symbols) * len(timeframes)
 
@@ -154,6 +161,12 @@ class BacktestEngine:
             log_interval=1,
             logger=self.logger
         )
+
+        data = {}
+        if preloaded_data:
+            data = preloaded_data
+        else:
+            data = self.load_data(symbols, timeframes, start_date, end_date)
 
         # Load and prepare data
         data = self.load_data(symbols, timeframes, start_date, end_date)
