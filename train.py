@@ -714,6 +714,23 @@ def train_with_memory_efficiency(model, df, symbol, timeframe, feature_columns, 
     import gc
     import tensorflow as tf
     
+
+
+    # Detect feature count mismatch and rebuild model if necessary
+    actual_feature_count = len(feature_columns)
+    expected_feature_count = model.input_shape[-1] if hasattr(model, 'input_shape') else None
+    
+    if expected_feature_count is not None and actual_feature_count != expected_feature_count:
+        logger.info(f"Rebuilding model: Feature count mismatch (expected {expected_feature_count}, got {actual_feature_count})")
+        
+        # Update input shape
+        model.input_shape = (model.lookback_window, actual_feature_count)
+        
+        # Force model rebuild
+        model.model = None
+        model._build_model()
+        logger.info(f"Model rebuilt with input shape: {model.input_shape}")
+
     # Force garbage collection before training
     gc.collect()
     

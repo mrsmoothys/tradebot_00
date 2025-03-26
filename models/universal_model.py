@@ -145,6 +145,17 @@ class UniversalModel:
 
     def _build_model(self) -> None:
         """Build memory-efficient model architecture for M1 Mac."""
+
+        # Get the feature dimension from input shape
+        _, timesteps, feature_dim = self.input_shape
+        
+        # Log architecture parameters
+        self.logger.info(f"Building model with input shape: (batch, {timesteps}, {feature_dim})")
+        
+        # Inputs
+        price_input = Input(shape=(timesteps, feature_dim), name='price_input')
+        symbol_input = Input(shape=(1,), dtype='int32', name='symbol_input')
+        timeframe_input = Input(shape=(1,), name='timeframe_input')
         # Determine feature count with hard limit
         feature_count = min(self.input_shape[-1], 30)  # Hard limit to prevent memory issues
         self.input_shape = (self.lookback_window, feature_count)
@@ -313,6 +324,23 @@ class UniversalModel:
         Returns:
             Tuple of (X_price, X_symbol, X_timeframe, y) arrays
         """
+
+        expected_feature_count = self.input_shape[-1]
+        actual_feature_count = len(feature_columns)
+        
+        # If mismatch detected, handle it
+        if actual_feature_count < expected_feature_count:
+            self.logger.warning(f"Feature count mismatch: padding from {actual_feature_count} to {expected_feature_count}")
+            
+            # Pad with zeros to reach expected dimension
+            padding_count = expected_feature_count - actual_feature_count
+            
+            # Create synthetic feature columns with zeros
+            for i in range(padding_count):
+                padding_col = f"padding_{i}"
+                df[padding_col] = 0.0
+                feature_columns.append(padding_col)
+
         monitor = DataQualityMonitor(self.logger)
     
         # Verify input quality

@@ -1,0 +1,33 @@
+[2025-03-25 16:11:37] [trading] [INFO] - ================================================================================
+[2025-03-25 16:11:37] [trading] [INFO] - ML Trading Bot v1.0.0
+[2025-03-25 16:11:37] [trading] [INFO] - Started at: 2025-03-25 16:11:37
+[2025-03-25 16:11:37] [trading] [INFO] - ================================================================================
+[2025-03-25 16:11:37] [trading] [INFO] - Running model training
+[2025-03-25 16:11:37] [trading] [INFO] - Reducing batch size from 32 to 16 for memory efficiency
+[2025-03-25 16:11:37] [trading] [INFO] - Limiting indicators from 10 to 5
+[2025-03-25 16:11:37] [trading] [INFO] - Training Configuration (Memory-Optimized for M1 Mac):
+[2025-03-25 16:11:37] [trading] [INFO] -   Symbols: ['BTCUSDT']
+[2025-03-25 16:11:37] [trading] [INFO] -   Timeframes: ['1h']
+[2025-03-25 16:11:37] [trading] [INFO] -   Date Range: 2021-01-01 to 2022-12-31
+[2025-03-25 16:11:37] [trading] [INFO] -   Batch Size: 16
+[2025-03-25 16:11:37] [trading] [INFO] -   Epochs: 1
+[2025-03-25 16:11:37] [trading] [INFO] - Training model for BTCUSDT 1h
+[2025-03-25 16:11:37] [trading] [INFO] - Loading data for BTCUSDT 1h
+[2025-03-25 16:11:37] [trading] [INFO] - Dataset too large (17483 rows), sampling 85.8% for memory efficiency
+[2025-03-25 16:11:37] [trading] [INFO] - Generating features with memory optimization
+[2025-03-25 16:11:38] [trading] [INFO] - Selecting features
+[2025-03-25 16:11:56] [trading] [INFO] - Selected 15 features
+[2025-03-25 16:11:56] [trading] [ERROR] - Error training model for BTCUSDT 1h: not enough values to unpack (expected 3, got 2)
+Traceback (most recent call last):
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/train.py", line 968, in run_training
+    model = UniversalModel(config_manager)
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 103, in __init__
+    self._build_model()
+  File "/Users/mrsmoothy/Desktop/rsidtrade/tradebot_0/models/universal_model.py", line 150, in _build_model
+    _, timesteps, feature_dim = self.input_shape
+ValueError: not enough values to unpack (expected 3, got 2)
+[2025-03-25 16:11:56] [trading] [INFO] - Total training time: 0:00:19
+[2025-03-25 16:11:56] [trading] [INFO] - Total execution time: 0:00:19
+[2025-03-25 16:11:56] [trading] [INFO] - ================================================================================
+[2025-03-25 16:11:56] [trading] [INFO] - Finished at: 2025-03-25 16:11:56
+[2025-03-25 16:11:56] [trading] [INFO] - ================================================================================
